@@ -19,6 +19,7 @@ import os
 import re
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable, Optional, TypeVar, Union
 
 from dotenv import load_dotenv
@@ -281,10 +282,30 @@ intent_chain = intent_prompt | intent_llm | StrOutputParser()
 # --- Pinecone vector DB + Reranker ---
 embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
 vector_store = None
-reranker = FlashrankRerank(
-    model="ms-marco-TinyBERT-L-2-v2",
-    top_n=RERANK_TOP_N,
-)
+
+# Keep Flashrank models out of /tmp (macOS clears it → empty dir, no re-download)
+FLASHRANK_MODEL = "ms-marco-TinyBERT-L-2-v2"
+FLASHRANK_CACHE = Path(__file__).resolve().parent / ".cache" / "flashrank"
+FLASHRANK_CACHE.mkdir(parents=True, exist_ok=True)
+
+
+def _build_flashrank_reranker() -> FlashrankRerank:
+    """Create Flashrank with a durable cache; repair incomplete downloads."""
+    from flashrank import Ranker
+
+    model_dir = FLASHRANK_CACHE / FLASHRANK_MODEL
+    onnx_path = model_dir / "flashrank-TinyBERT-L-2-v2.onnx"
+    if model_dir.exists() and not onnx_path.exists():
+        # Empty/partial dir blocks Flashrank's download check
+        import shutil
+
+        shutil.rmtree(model_dir)
+
+    client = Ranker(model_name=FLASHRANK_MODEL, cache_dir=str(FLASHRANK_CACHE))
+    return FlashrankRerank(client=client, model=FLASHRANK_MODEL, top_n=RERANK_TOP_N)
+
+
+reranker = _build_flashrank_reranker()
 
 if PINECONE_API_KEY:
     vector_store = PineconeVectorStore.from_existing_index(

@@ -104,8 +104,8 @@ export default function ChatPanel({ onResponse }: ChatPanelProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b border-black/[0.06] px-5 py-3">
-        <h2 className="mr-auto text-[15px] font-semibold text-[#1d1d1f]">Chat</h2>
+      <div className="flex flex-wrap items-center gap-2 border-b border-black/[0.06] px-4 py-2">
+        <h2 className="mr-auto text-[14px] font-semibold text-[#1d1d1f]">RAG</h2>
         <input
           value={sessionId}
           onChange={(e) => setSessionId(e.target.value)}

@@ -39,7 +39,7 @@ export default function IngestPage() {
   }
 
   return (
-    <div>
+    <div className="min-h-0 flex-1 overflow-y-auto pb-4">
       <PageHeader
         title="Ingest"
         description="Load a PDF, chunk it, enrich metadata, and embed into Pinecone."

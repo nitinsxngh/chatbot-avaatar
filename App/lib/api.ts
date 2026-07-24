@@ -25,6 +25,7 @@ export type ConfigField = {
   label: string;
   type: string;
   value: string | number | boolean;
+  default?: string | number | boolean;
   has_value: boolean;
   secret: boolean;
 };
@@ -119,6 +120,15 @@ export const api = {
     request<{ updated: string[]; config: ConfigResponse }>("/api/config", {
       method: "PATCH",
       body: JSON.stringify({ updates }),
+    }),
+
+  resetConfig: (options?: { keys?: string[]; include_secrets?: boolean }) =>
+    request<{ updated: string[]; config: ConfigResponse }>("/api/config/reset", {
+      method: "POST",
+      body: JSON.stringify({
+        keys: options?.keys ?? null,
+        include_secrets: options?.include_secrets ?? false,
+      }),
     }),
 
   runIngest: (pdf_path?: string) =>

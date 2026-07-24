@@ -13,10 +13,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className="min-h-screen">
+    <html lang="en" className="h-full overflow-hidden">
+      <body className="flex h-full flex-col overflow-hidden">
         <Nav />
-        <main className="mx-auto max-w-[1280px] px-4 py-4 sm:px-6">{children}</main>
+        <main className="mx-auto flex min-h-0 w-full max-w-[1280px] flex-1 flex-col overflow-hidden px-3 py-2 sm:px-4">
+          {children}
+        </main>
       </body>
     </html>
   );

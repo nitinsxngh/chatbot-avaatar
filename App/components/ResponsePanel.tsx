@@ -15,9 +15,9 @@ export default function ResponsePanel({ meta }: { meta: ChatResponse | null }) {
   if (!meta) {
     return (
       <div className="flex h-full flex-col">
-        <div className="border-b border-black/[0.06] px-4 py-3">
-          <h2 className="text-[15px] font-semibold text-[#1d1d1f]">Response</h2>
-          <p className="text-[12px] text-[#86868b]">Pipeline debug output</p>
+        <div className="border-b border-black/[0.06] px-4 py-2">
+          <h2 className="text-[14px] font-semibold text-[#1d1d1f]">Response</h2>
+          <p className="text-[11px] text-[#86868b]">Pipeline debug output</p>
         </div>
         <div className="flex flex-1 items-center justify-center p-6 text-center">
           <p className="text-[13px] text-[#86868b]">
@@ -34,9 +34,9 @@ export default function ResponsePanel({ meta }: { meta: ChatResponse | null }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-black/[0.06] px-4 py-3">
-        <h2 className="text-[15px] font-semibold text-[#1d1d1f]">Response</h2>
-        <p className="text-[12px] text-[#86868b]">Terminal-equivalent debug output</p>
+      <div className="border-b border-black/[0.06] px-4 py-2">
+        <h2 className="text-[14px] font-semibold text-[#1d1d1f]">Response</h2>
+        <p className="text-[11px] text-[#86868b]">Terminal-equivalent debug output</p>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">

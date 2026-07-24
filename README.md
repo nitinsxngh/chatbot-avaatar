@@ -51,7 +51,7 @@ Open [http://localhost:3000](http://localhost:3000) — three sections:
 
 | Page | Purpose |
 |---|---|
-| `/chat` | Chat with session support |
+| `/rag` | RAG chat with session support |
 | `/ingest` | Run PDF ingest into Pinecone |
 | `/config` | View/edit all env-backed variables |
 

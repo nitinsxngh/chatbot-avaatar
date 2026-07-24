@@ -322,6 +322,7 @@ def get_config(mask_secrets: bool = True) -> dict:
             "label": meta["label"],
             "type": meta["type"],
             "value": display,
+            "default": meta["default"],
             "has_value": bool(value),
             "secret": bool(meta.get("secret")),
         }
@@ -355,6 +356,33 @@ def update_config(updates: dict[str, Any]) -> dict:
         _apply_runtime_config(applied)
 
     return {"updated": list(applied.keys()), "config": get_config(mask_secrets=True)}
+
+
+def reset_config(
+    keys: Optional[list] = None,
+    include_secrets: bool = False,
+) -> dict:
+    """
+    Reset config fields to their declared defaults and persist to .env.
+
+    By default skips secret keys (API keys) so credentials are preserved.
+    Pass keys=[...] to reset only specific fields.
+    """
+    if not ENV_PATH.exists():
+        ENV_PATH.touch()
+
+    targets = keys if keys else list(CONFIG_FIELDS.keys())
+    defaults: dict[str, Any] = {}
+
+    for key in targets:
+        if key not in CONFIG_FIELDS:
+            continue
+        meta = CONFIG_FIELDS[key]
+        if meta.get("secret") and not include_secrets:
+            continue
+        defaults[key] = meta["default"]
+
+    return update_config(defaults)
 
 
 def _apply_runtime_config(applied: dict[str, Any]) -> None:
