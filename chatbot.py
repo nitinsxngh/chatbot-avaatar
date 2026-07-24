@@ -19,7 +19,7 @@ import os
 import re
 import time
 from datetime import datetime, timezone
-from typing import Callable, Optional, TypeVar
+from typing import Callable, Optional, TypeVar, Union
 
 from dotenv import load_dotenv
 from langchain_community.document_compressors import FlashrankRerank
@@ -389,7 +389,18 @@ def parse_intent_label(raw: str) -> Optional[str]:
     return None
 
 
-def classify_intent(question: str) -> str:
+def _trace(trace: Optional[dict], message: str) -> None:
+    """Record a log line for API traces and keep CLI printing."""
+    if trace is not None:
+        trace.setdefault("logs", []).append(message)
+    print(message)
+
+
+def classify_intent(
+    question: str,
+    history: Optional[list] = None,
+    trace: Optional[dict] = None,
+) -> str:
     """
     LLM intent classifier with personal-memory fast path.
     Returns:
@@ -398,13 +409,16 @@ def classify_intent(question: str) -> str:
       - "document" → retrieve from Pinecone
     """
     text = question.strip()
+    history = history if history is not None else chat_history
 
     # Fast path: personal facts / memory questions → always chat
     if PERSONAL_MEMORY_RE.search(text):
-        print("[intent=chat (personal_memory)]")
+        _trace(trace, "[intent=chat (personal_memory)]")
+        if trace is not None:
+            trace["intent_detail"] = "personal_memory"
         return "chat"
 
-    history_for_intent = chat_history[-6:] if chat_history else []
+    history_for_intent = history[-6:] if history else []
 
     def _run() -> str:
         return intent_chain.invoke(
@@ -419,12 +433,14 @@ def classify_intent(question: str) -> str:
 
     if label is None:
         # Safer than forcing document: use memory chat when history exists
-        fallback = "chat" if chat_history else "document"
-        print(f"[intent_raw={raw!r} → fallback={fallback}]")
+        fallback = "chat" if history else "document"
+        _trace(trace, f"[intent_raw={raw!r} → fallback={fallback}]")
+        if trace is not None:
+            trace["intent_detail"] = {"raw": raw, "fallback": fallback}
         return fallback
 
     # followup only makes sense when there is prior conversation
-    if label == "followup" and not chat_history:
+    if label == "followup" and not history:
         return "chat"
 
     return label
@@ -456,14 +472,15 @@ def with_retry(label: str, fn: Callable[[], T], retries: int = MAX_API_RETRIES) 
     raise RuntimeError(f"{label} failed after {retries} attempts") from last_error
 
 
-def rewrite_search_query(question: str) -> str:
+def rewrite_search_query(question: str, history: Optional[list] = None) -> str:
     """Make a standalone search query using recent chat history."""
-    if not chat_history:
+    history = history if history is not None else chat_history
+    if not history:
         return question
 
     def _run() -> str:
         return rewrite_chain.invoke(
-            {"question": question, "chat_history": chat_history[-6:]}
+            {"question": question, "chat_history": history[-6:]}
         ).strip()
 
     rewritten = with_retry("query_rewrite", _run)
@@ -506,15 +523,16 @@ def broaden_search_query(question: str, previous_query: str) -> str:
     return broader
 
 
-def retrieve_and_rerank(search_query: str):
+def retrieve_and_rerank(search_query: str, trace: Optional[dict] = None):
     """
     Retrieve with optional metadata filter, then rerank.
-    Returns (reranked_docs, pinecone_top_score).
+    Returns (reranked_docs, pinecone_top_score, retrieval_meta).
     """
 
     def _run():
         metadata_filter = build_metadata_filter(search_query)
-        print(f"[metadata_filter={filter_label(metadata_filter)}]")
+        filter_str = filter_label(metadata_filter)
+        _trace(trace, f"[metadata_filter={filter_str}]")
 
         search_kwargs = {"k": RETRIEVE_K}
         if metadata_filter:
@@ -525,9 +543,11 @@ def retrieve_and_rerank(search_query: str):
             **search_kwargs,
         )
 
+        filter_fallback = False
         # Fallback if filter is too strict
         if metadata_filter and not scored:
-            print("[metadata_filter=none (fallback)]")
+            filter_fallback = True
+            _trace(trace, "[metadata_filter=none (fallback)]")
             scored = vector_store.similarity_search_with_score(
                 search_query,
                 k=RETRIEVE_K,
@@ -538,7 +558,11 @@ def retrieve_and_rerank(search_query: str):
         pinecone_top = max((float(score) for _, score in scored), default=0.0)
 
         reranked = reranker.compress_documents(candidates, query=search_query)
-        return reranked, pinecone_top
+        retrieval_meta = {
+            "metadata_filter": filter_str,
+            "filter_fallback": filter_fallback,
+        }
+        return reranked, pinecone_top, retrieval_meta
 
     return with_retry("retrieve_and_rerank", _run)
 
@@ -584,7 +608,11 @@ def best_score(docs) -> float:
     return max(doc_score(doc) for doc in docs)
 
 
-def effective_confidence(flashrank_score: float, pinecone_score: float) -> float:
+def effective_confidence(
+    flashrank_score: float,
+    pinecone_score: float,
+    trace: Optional[dict] = None,
+) -> float:
     """
     Pick a confidence value for high/mid/low banding.
 
@@ -603,20 +631,20 @@ def effective_confidence(flashrank_score: float, pinecone_score: float) -> float
     else:
         mapped = 0.0
 
-    print(
+    note = (
         f"[flashrank_unreliable={flashrank_score:.3f} → "
         f"pinecone={pinecone_score:.3f} → mapped={mapped:.3f}]"
     )
+    _trace(trace, note)
     return mapped
 
 
-def show_best_docs(docs) -> None:
-    """Print the best reranked chunks with scores."""
+def serialize_best_docs(docs) -> list:
+    """Structured chunk info (mirrors show_best_docs terminal output)."""
     if not docs:
-        print("Best chunks: (none)")
-        return
+        return []
 
-    print(f"Best {len(docs)} chunk(s) after rerank:")
+    payload = []
     for i, doc in enumerate(docs, start=1):
         score = doc_score(doc)
         topic = doc.metadata.get("primary_topic", "?")
@@ -624,29 +652,66 @@ def show_best_docs(docs) -> None:
         if len(snippet) > SHOW_SNIPPET_CHARS:
             snippet = snippet[:SHOW_SNIPPET_CHARS] + "..."
 
-        print(
-            f"  #{i}  score={score:.3f}  "
-            f"({page_label(doc.metadata)} | topic={topic})"
+        payload.append(
+            {
+                "rank": i,
+                "score": round(score, 3),
+                "page": page_label(doc.metadata),
+                "topic": topic,
+                "snippet": snippet,
+            }
         )
-        print(f"      {snippet}")
+    return payload
 
 
-def remember(question: str, answer: str) -> None:
-    """Save this turn to MongoDB memory."""
-    chat_history.append(HumanMessage(content=question))
-    chat_history.append(AIMessage(content=answer))
-    save_history(SESSION_ID, chat_history)
+def show_best_docs(docs, trace: Optional[dict] = None) -> None:
+    """Print the best reranked chunks with scores."""
+    if not docs:
+        _trace(trace, "Best chunks: (none)")
+        return
+
+    _trace(trace, f"Best {len(docs)} chunk(s) after rerank:")
+    for item in serialize_best_docs(docs):
+        _trace(
+            trace,
+            f"  #{item['rank']}  score={item['score']:.3f}  "
+            f"({item['page']} | topic={item['topic']})",
+        )
+        _trace(trace, f"      {item['snippet']}")
+
+
+def remember(
+    question: str,
+    answer: str,
+    session_id: Optional[str] = None,
+    history: Optional[list] = None,
+) -> list:
+    """Save this turn to MongoDB memory. Returns updated history."""
+    sid = session_id or SESSION_ID
+    history = list(history if history is not None else chat_history)
+
+    history.append(HumanMessage(content=question))
+    history.append(AIMessage(content=answer))
+    save_history(sid, history)
 
     max_messages = MAX_HISTORY_TURNS * 2
-    if len(chat_history) > max_messages:
-        del chat_history[:-max_messages]
+    if len(history) > max_messages:
+        history = history[-max_messages:]
+        save_history(sid, history)
+
+    if sid == SESSION_ID:
+        chat_history.clear()
+        chat_history.extend(history)
+
+    return history
 
 
-def log_turn(event: dict) -> None:
+def log_turn(event: dict, session_id: Optional[str] = None) -> None:
     """Persist a structured turn log to MongoDB (durable app logs)."""
+    sid = session_id or SESSION_ID
     payload = {
         **event,
-        "session_id": SESSION_ID,
+        "session_id": sid,
         "assistant_name": ASSISTANT_NAME,
         "assistant_organisation": ASSISTANT_ORGANISATION,
         "created_at": datetime.now(timezone.utc),
@@ -671,41 +736,52 @@ def confidence_band(score: float) -> str:
     return "low"
 
 
-def ask(question: str) -> str:
+def ask(
+    question: str,
+    session_id: Optional[str] = None,
+    return_meta: bool = False,
+) -> Union[str, dict]:
     """
     Question → Intent → Need documents?
                          YES → rewrite → Retriever → Reranker → GPT / clarify / low
                          NO  → Normal Chat
     """
+    sid = session_id or SESSION_ID
+    history = load_history(sid)
     started = time.perf_counter()
+    trace: Optional[dict] = {"logs": [], "retrieval_attempts": []} if return_meta else None
 
     question = sanitize_user_input(question)
     if not question:
-        return "Please type a question."
+        answer = "Please type a question."
+        if return_meta:
+            return {"answer": answer, "session_id": sid, "trace": trace}
+        return answer
 
     # Block obvious jailbreak / instruction-override attempts early
     if looks_like_injection(question):
-        print("[security=prompt_injection_blocked]")
+        _trace(trace, "[security=prompt_injection_blocked]")
         answer = INJECTION_BLOCK_REPLY
-        remember(question, answer)
-        log_turn(
-            {
-                "question": question,
-                "answer": answer,
-                "intent": "blocked",
-                "route": "SECURITY_BLOCK",
-                "band": None,
-                "flashrank_score": None,
-                "pinecone_score": None,
-                "confidence_score": None,
-                "search_query": None,
-                "pages": [],
-                "topics": [],
-                "latency_ms": int((time.perf_counter() - started) * 1000),
-                "security_blocked": True,
-            }
-        )
-        return answer
+        remember(question, answer, session_id=sid, history=history)
+        meta = {
+            "answer": answer,
+            "session_id": sid,
+            "question": question,
+            "intent": "blocked",
+            "route": "SECURITY_BLOCK",
+            "band": None,
+            "flashrank_score": None,
+            "pinecone_score": None,
+            "confidence_score": None,
+            "search_query": None,
+            "pages": [],
+            "topics": [],
+            "latency_ms": int((time.perf_counter() - started) * 1000),
+            "security_blocked": True,
+            "trace": trace,
+        }
+        log_turn(meta, session_id=sid)
+        return meta if return_meta else answer
 
     safe_question = wrap_untrusted(question)
 
@@ -717,16 +793,19 @@ def ask(question: str) -> str:
     band = None
     pages: list = []
     topics: list = []
+    intent = "chat"
+    route = "CHAT"
+    retry_queries: list = []
 
     # 1. Intent
-    intent = classify_intent(safe_question)
+    intent = classify_intent(safe_question, history=history, trace=trace)
 
     # 2. Route
     if needs_documents(intent):
         # YES → rewrite → retrieve/rerank (retry when still low)
-        search_query = rewrite_search_query(safe_question)
+        search_query = rewrite_search_query(safe_question, history=history)
         if search_query != safe_question:
-            print(f"[search_query={search_query}]")
+            _trace(trace, f"[search_query={search_query}]")
 
         best_docs = []
         top_score = 0.0
@@ -735,20 +814,42 @@ def ask(question: str) -> str:
         used_query = search_query
 
         for attempt in range(1, MAX_RETRIEVAL_ATTEMPTS + 1):
-            print(f"[retrieval_attempt={attempt}/{MAX_RETRIEVAL_ATTEMPTS}]")
-            docs, pinecone_top = retrieve_and_rerank(used_query)
-            show_best_docs(docs)
+            _trace(trace, f"[retrieval_attempt={attempt}/{MAX_RETRIEVAL_ATTEMPTS}]")
+            docs, pinecone_top, retrieval_meta = retrieve_and_rerank(
+                used_query,
+                trace=trace,
+            )
+            show_best_docs(docs, trace=trace)
 
             flashrank_top = best_score(docs)
-            attempt_score = effective_confidence(flashrank_top, pinecone_top)
+            attempt_score = effective_confidence(
+                flashrank_top,
+                pinecone_top,
+                trace=trace,
+            )
             attempt_band = confidence_band(attempt_score)
-            print(
+            confidence_line = (
                 f"[confidence={attempt_score:.3f} "
                 f"(flashrank={flashrank_top:.3f}, pinecone={pinecone_top:.3f}) | "
                 f"band={attempt_band} | "
                 f"flashrank_high≥{FLASHRANK_HIGH_THRESHOLD} "
                 f"flashrank_mid≥{FLASHRANK_MID_THRESHOLD}]"
             )
+            _trace(trace, confidence_line)
+
+            attempt_record = {
+                "attempt": attempt,
+                "query": used_query,
+                "metadata_filter": retrieval_meta.get("metadata_filter"),
+                "filter_fallback": retrieval_meta.get("filter_fallback", False),
+                "flashrank_score": round(flashrank_top, 3),
+                "pinecone_score": round(pinecone_top, 3),
+                "confidence_score": round(attempt_score, 3),
+                "band": attempt_band,
+                "chunks": serialize_best_docs(docs),
+            }
+            if trace is not None:
+                trace["retrieval_attempts"].append(attempt_record)
 
             # Keep the strongest attempt (retry must not make results worse)
             if attempt_score >= top_score:
@@ -762,7 +863,8 @@ def ask(question: str) -> str:
 
             if attempt < MAX_RETRIEVAL_ATTEMPTS:
                 broader = broaden_search_query(safe_question, used_query)
-                print(f"[retry_search_query={broader}]")
+                _trace(trace, f"[retry_search_query={broader}]")
+                retry_queries.append(broader)
                 used_query = broader
 
         band = confidence_band(top_score)
@@ -781,7 +883,7 @@ def ask(question: str) -> str:
                 return rag_chain.invoke(
                     {
                         "question": safe_question,
-                        "chat_history": chat_history,
+                        "chat_history": history,
                         "context": context,
                     }
                 )
@@ -794,7 +896,7 @@ def ask(question: str) -> str:
                 return clarify_chain.invoke(
                     {
                         "question": safe_question,
-                        "chat_history": chat_history,
+                        "chat_history": history,
                         "context": context,
                     }
                 )
@@ -810,7 +912,7 @@ def ask(question: str) -> str:
             return chat_chain.invoke(
                 {
                     "question": safe_question,
-                    "chat_history": chat_history,
+                    "chat_history": history,
                 }
             )
 
@@ -818,26 +920,322 @@ def ask(question: str) -> str:
         route = "CHAT"
 
     latency_ms = int((time.perf_counter() - started) * 1000)
-    print(f"[intent={intent} | route={route} | latency_ms={latency_ms}]")
-    remember(question, answer)
-    log_turn(
-        {
-            "question": question,
-            "answer": answer,
+    summary = f"[intent={intent} | route={route} | latency_ms={latency_ms}]"
+    _trace(trace, summary)
+
+    if trace is not None:
+        trace["summary"] = {
             "intent": intent,
             "route": route,
-            "band": band,
-            "flashrank_score": flashrank_score,
-            "pinecone_score": pinecone_score,
-            "confidence_score": confidence_score,
+            "latency_ms": latency_ms,
             "search_query": search_query,
+            "retry_queries": retry_queries,
+            "band": band,
+            "flashrank_score": round(flashrank_score, 3) if flashrank_score is not None else None,
+            "pinecone_score": round(pinecone_score, 3) if pinecone_score is not None else None,
+            "confidence_score": round(confidence_score, 3) if confidence_score is not None else None,
             "pages": pages,
             "topics": topics,
-            "latency_ms": latency_ms,
-            "security_blocked": False,
         }
-    )
-    return answer
+        trace["thresholds"] = {
+            "flashrank_high": FLASHRANK_HIGH_THRESHOLD,
+            "flashrank_mid": FLASHRANK_MID_THRESHOLD,
+            "flashrank_unreliable_below": FLASHRANK_UNRELIABLE_BELOW,
+            "pinecone_high": PINECONE_HIGH_THRESHOLD,
+            "pinecone_mid": PINECONE_MID_THRESHOLD,
+            "retrieve_k": RETRIEVE_K,
+            "rerank_top_n": RERANK_TOP_N,
+            "max_retrieval_attempts": MAX_RETRIEVAL_ATTEMPTS,
+        }
+
+    remember(question, answer, session_id=sid, history=history)
+    turn_meta = {
+        "answer": answer,
+        "session_id": sid,
+        "question": question,
+        "intent": intent,
+        "route": route,
+        "band": band,
+        "flashrank_score": flashrank_score,
+        "pinecone_score": pinecone_score,
+        "confidence_score": confidence_score,
+        "search_query": search_query,
+        "pages": pages,
+        "topics": topics,
+        "latency_ms": latency_ms,
+        "security_blocked": False,
+        "trace": trace,
+    }
+    log_turn(turn_meta, session_id=sid)
+    return turn_meta if return_meta else answer
+
+
+def ask_stream(question: str, session_id: Optional[str] = None):
+    """
+    Streaming variant of ask().
+
+    Yields dict events:
+      {"type": "status", "message": "..."}
+      {"type": "token", "content": "..."}
+      {"type": "done", "response": {...full ChatResponse meta...}}
+      {"type": "error", "message": "..."}
+    """
+    sid = session_id or SESSION_ID
+    history = load_history(sid)
+    started = time.perf_counter()
+    trace: dict = {"logs": [], "retrieval_attempts": []}
+
+    question = sanitize_user_input(question)
+    if not question:
+        answer = "Please type a question."
+        yield {"type": "token", "content": answer}
+        yield {
+            "type": "done",
+            "response": {
+                "answer": answer,
+                "session_id": sid,
+                "intent": None,
+                "route": None,
+                "band": None,
+                "latency_ms": int((time.perf_counter() - started) * 1000),
+                "confidence_score": None,
+                "flashrank_score": None,
+                "pinecone_score": None,
+                "search_query": None,
+                "pages": [],
+                "topics": [],
+                "security_blocked": False,
+                "trace": trace,
+            },
+        }
+        return
+
+    if looks_like_injection(question):
+        _trace(trace, "[security=prompt_injection_blocked]")
+        yield {"type": "status", "message": "Blocked unsafe request"}
+        answer = INJECTION_BLOCK_REPLY
+        remember(question, answer, session_id=sid, history=history)
+        for ch in answer:
+            yield {"type": "token", "content": ch}
+        meta = {
+            "answer": answer,
+            "session_id": sid,
+            "question": question,
+            "intent": "blocked",
+            "route": "SECURITY_BLOCK",
+            "band": None,
+            "flashrank_score": None,
+            "pinecone_score": None,
+            "confidence_score": None,
+            "search_query": None,
+            "pages": [],
+            "topics": [],
+            "latency_ms": int((time.perf_counter() - started) * 1000),
+            "security_blocked": True,
+            "trace": trace,
+        }
+        log_turn(meta, session_id=sid)
+        yield {"type": "done", "response": meta}
+        return
+
+    safe_question = wrap_untrusted(question)
+    search_query = None
+    flashrank_score = None
+    pinecone_score = None
+    confidence_score = None
+    band = None
+    pages: list = []
+    topics: list = []
+    intent = "chat"
+    route = "CHAT"
+    retry_queries: list = []
+    answer = ""
+
+    yield {"type": "status", "message": "Understanding your question…"}
+    intent = classify_intent(safe_question, history=history, trace=trace)
+    yield {"type": "status", "message": f"Intent: {intent}"}
+
+    stream_inputs: Optional[dict] = None
+    stream_chain = None
+
+    if needs_documents(intent):
+        yield {"type": "status", "message": "Rewriting search query…"}
+        search_query = rewrite_search_query(safe_question, history=history)
+        if search_query != safe_question:
+            _trace(trace, f"[search_query={search_query}]")
+
+        best_docs = []
+        top_score = 0.0
+        best_pinecone = 0.0
+        best_flashrank = 0.0
+        used_query = search_query
+
+        for attempt in range(1, MAX_RETRIEVAL_ATTEMPTS + 1):
+            yield {
+                "type": "status",
+                "message": f"Retrieving documents ({attempt}/{MAX_RETRIEVAL_ATTEMPTS})…",
+            }
+            _trace(trace, f"[retrieval_attempt={attempt}/{MAX_RETRIEVAL_ATTEMPTS}]")
+            docs, pinecone_top, retrieval_meta = retrieve_and_rerank(
+                used_query,
+                trace=trace,
+            )
+            show_best_docs(docs, trace=trace)
+
+            flashrank_top = best_score(docs)
+            attempt_score = effective_confidence(
+                flashrank_top,
+                pinecone_top,
+                trace=trace,
+            )
+            attempt_band = confidence_band(attempt_score)
+            confidence_line = (
+                f"[confidence={attempt_score:.3f} "
+                f"(flashrank={flashrank_top:.3f}, pinecone={pinecone_top:.3f}) | "
+                f"band={attempt_band} | "
+                f"flashrank_high≥{FLASHRANK_HIGH_THRESHOLD} "
+                f"flashrank_mid≥{FLASHRANK_MID_THRESHOLD}]"
+            )
+            _trace(trace, confidence_line)
+            yield {
+                "type": "status",
+                "message": (
+                    f"Confidence {attempt_score:.2f} · {attempt_band} · "
+                    f"{len(docs)} chunk(s)"
+                ),
+            }
+
+            attempt_record = {
+                "attempt": attempt,
+                "query": used_query,
+                "metadata_filter": retrieval_meta.get("metadata_filter"),
+                "filter_fallback": retrieval_meta.get("filter_fallback", False),
+                "flashrank_score": round(flashrank_top, 3),
+                "pinecone_score": round(pinecone_top, 3),
+                "confidence_score": round(attempt_score, 3),
+                "band": attempt_band,
+                "chunks": serialize_best_docs(docs),
+            }
+            trace["retrieval_attempts"].append(attempt_record)
+
+            if attempt_score >= top_score:
+                top_score = attempt_score
+                best_docs = docs
+                best_pinecone = pinecone_top
+                best_flashrank = flashrank_top
+
+            if attempt_band != "low":
+                break
+
+            if attempt < MAX_RETRIEVAL_ATTEMPTS:
+                yield {"type": "status", "message": "Low confidence — broadening search…"}
+                broader = broaden_search_query(safe_question, used_query)
+                _trace(trace, f"[retry_search_query={broader}]")
+                retry_queries.append(broader)
+                used_query = broader
+
+        band = confidence_band(top_score)
+        flashrank_score = best_flashrank
+        pinecone_score = best_pinecone
+        confidence_score = top_score
+        pages = [
+            doc.metadata.get("page_number") or doc.metadata.get("page")
+            for doc in best_docs
+        ]
+        topics = [doc.metadata.get("primary_topic") for doc in best_docs]
+        context = format_docs(best_docs)
+
+        if band == "high":
+            route = "RAG_HIGH"
+            stream_chain = rag_chain
+            stream_inputs = {
+                "question": safe_question,
+                "chat_history": history,
+                "context": context,
+            }
+            yield {"type": "status", "message": "Generating answer…"}
+        elif band == "mid":
+            route = "RAG_MID"
+            stream_chain = clarify_chain
+            stream_inputs = {
+                "question": safe_question,
+                "chat_history": history,
+                "context": context,
+            }
+            yield {"type": "status", "message": "Asking a clarifying question…"}
+        else:
+            answer = LOW_CONFIDENCE_REPLY
+            route = "RAG_LOW"
+            yield {"type": "status", "message": "No strong match found"}
+            for ch in answer:
+                yield {"type": "token", "content": ch}
+    else:
+        route = "CHAT"
+        stream_chain = chat_chain
+        stream_inputs = {
+            "question": safe_question,
+            "chat_history": history,
+        }
+        yield {"type": "status", "message": "Replying…"}
+
+    if stream_chain is not None and stream_inputs is not None:
+        try:
+            for chunk in stream_chain.stream(stream_inputs):
+                if chunk:
+                    answer += chunk
+                    yield {"type": "token", "content": chunk}
+        except Exception as exc:
+            yield {"type": "error", "message": str(exc)}
+            return
+
+    latency_ms = int((time.perf_counter() - started) * 1000)
+    summary = f"[intent={intent} | route={route} | latency_ms={latency_ms}]"
+    _trace(trace, summary)
+
+    trace["summary"] = {
+        "intent": intent,
+        "route": route,
+        "latency_ms": latency_ms,
+        "search_query": search_query,
+        "retry_queries": retry_queries,
+        "band": band,
+        "flashrank_score": round(flashrank_score, 3) if flashrank_score is not None else None,
+        "pinecone_score": round(pinecone_score, 3) if pinecone_score is not None else None,
+        "confidence_score": round(confidence_score, 3) if confidence_score is not None else None,
+        "pages": pages,
+        "topics": topics,
+    }
+    trace["thresholds"] = {
+        "flashrank_high": FLASHRANK_HIGH_THRESHOLD,
+        "flashrank_mid": FLASHRANK_MID_THRESHOLD,
+        "flashrank_unreliable_below": FLASHRANK_UNRELIABLE_BELOW,
+        "pinecone_high": PINECONE_HIGH_THRESHOLD,
+        "pinecone_mid": PINECONE_MID_THRESHOLD,
+        "retrieve_k": RETRIEVE_K,
+        "rerank_top_n": RERANK_TOP_N,
+        "max_retrieval_attempts": MAX_RETRIEVAL_ATTEMPTS,
+    }
+
+    remember(question, answer, session_id=sid, history=history)
+    turn_meta = {
+        "answer": answer,
+        "session_id": sid,
+        "question": question,
+        "intent": intent,
+        "route": route,
+        "band": band,
+        "flashrank_score": flashrank_score,
+        "pinecone_score": pinecone_score,
+        "confidence_score": confidence_score,
+        "search_query": search_query,
+        "pages": pages,
+        "topics": topics,
+        "latency_ms": latency_ms,
+        "security_blocked": False,
+        "trace": trace,
+    }
+    log_turn(turn_meta, session_id=sid)
+    yield {"type": "done", "response": turn_meta}
 
 
 def main() -> None:

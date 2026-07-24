@@ -3,4 +3,5 @@ __pycache__/
 *.pyc
 .venv/
 venv/
-vector_db/
+App/node_modules/
+App/.next/

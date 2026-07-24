@@ -11,6 +11,7 @@ Steps:
 import os
 import time
 from pathlib import Path
+from typing import Optional, Union
 
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
@@ -57,15 +58,17 @@ def ensure_index(pc: Pinecone, index_name: str) -> None:
     print("Index is ready.")
 
 
-def ingest() -> None:
+def ingest(pdf_path: Optional[Union[str, Path]] = None) -> dict:
+    path = Path(pdf_path) if pdf_path else PDF_PATH
+
     if not PINECONE_API_KEY:
         raise ValueError("Missing PINECONE_API_KEY in .env")
 
-    if not PDF_PATH.exists():
-        raise FileNotFoundError(f"PDF not found: {PDF_PATH.resolve()}")
+    if not path.exists():
+        raise FileNotFoundError(f"PDF not found: {path.resolve()}")
 
-    print(f"Loading PDF: {PDF_PATH}")
-    loader = PyPDFLoader(str(PDF_PATH))
+    print(f"Loading PDF: {path}")
+    loader = PyPDFLoader(str(path))
     pages = loader.load()
     print(f"Loaded {len(pages)} pages")
 
@@ -114,6 +117,14 @@ def ingest() -> None:
     print("Done. Pinecone vector DB is ready.")
     print(f"  Index: {PINECONE_INDEX_NAME}")
     print(f"  Chunks stored: {len(chunks)}")
+
+    return {
+        "pdf_path": str(path),
+        "pages": len(pages),
+        "chunks": len(chunks),
+        "index_name": PINECONE_INDEX_NAME,
+        "topic_distribution": topic_counts,
+    }
 
 
 if __name__ == "__main__":

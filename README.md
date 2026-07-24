@@ -25,6 +25,49 @@ ASSISTANT_ORGANISATION=Chatbot Avatar
 CHAT_SESSION_ID=default
 ```
 
+## Web UI (Next.js + FastAPI)
+
+The `App/` folder is a Next.js control panel. The Python API lives in `api/` and wraps the existing `ingest.py` and `chatbot.py` logic.
+
+### Start the API (port 8000)
+
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+./scripts/run-api.sh
+# or: uvicorn api.main:app --reload --port 8000
+```
+
+### Start the frontend (port 3000)
+
+```bash
+cd App
+cp .env.local.example .env.local
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) — three sections:
+
+| Page | Purpose |
+|---|---|
+| `/chat` | Chat with session support |
+| `/ingest` | Run PDF ingest into Pinecone |
+| `/config` | View/edit all env-backed variables |
+
+### API endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/health` | Health check |
+| POST | `/api/ingest/run` | Run ingest (`{ "pdf_path": "..." }`) |
+| GET | `/api/config` | List all config variables |
+| PATCH | `/api/config` | Update config (`{ "updates": { "KEY": "value" } }`) |
+| POST | `/api/chat` | Send message (`{ "message", "session_id?" }`) |
+| GET | `/api/chat/history?session_id=` | Load session history |
+| DELETE | `/api/chat/history?session_id=` | Clear session |
+| GET | `/api/chat/sessions` | List session IDs |
+
 ## Ingest the PDF (Pinecone)
 
 ```bash
