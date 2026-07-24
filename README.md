@@ -2,6 +2,8 @@
 
 Chatbot with OpenAI, LLM intent routing, Flashrank reranking, **Pinecone** vector DB, **MongoDB** chat memory, confidence bands, retries, and prompt-injection defenses.
 
+> **Full system docs:** see [RAG.md](./RAG.md) for complete architecture, every module, APIs, streaming, config, security, and troubleshooting.
+
 ## Setup
 
 ```bash
