@@ -136,14 +136,14 @@ CONFIG_FIELDS: dict[str, dict[str, Any]] = {
         "label": "Assistant name",
         "category": "assistant",
         "type": "string",
-        "default": "Digital Marketing Assistant",
+        "default": "Document Assistant",
         "module": "chatbot",
     },
     "ASSISTANT_ROLE": {
         "label": "Assistant role",
         "category": "assistant",
         "type": "string",
-        "default": "digital marketing",
+        "default": "answering questions about the uploaded document",
         "module": "chatbot",
     },
     "ASSISTANT_ORGANISATION": {
@@ -407,6 +407,11 @@ def _apply_runtime_config(applied: dict[str, Any]) -> None:
             setattr(chatbot, key, value)
         if key == "CHAT_SESSION_ID":
             chatbot.SESSION_ID = str(value)
+        if key in {"ASSISTANT_NAME", "ASSISTANT_ROLE", "ASSISTANT_ORGANISATION"}:
+            try:
+                chatbot.refresh_assistant_prompts()
+            except Exception:
+                pass
         if key in ingest_keys:
             if key == "PDF_PATH":
                 ingest.PDF_PATH = Path(str(value))

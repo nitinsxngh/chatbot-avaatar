@@ -125,7 +125,7 @@ export default function ChatPanel({ onResponse }: ChatPanelProps) {
           <div className="flex h-full flex-col items-center justify-center text-center">
             <p className="text-[15px] font-medium text-[#1d1d1f]">Start a conversation</p>
             <p className="mt-1 text-[14px] text-[#86868b]">
-              Ask about SEO, email marketing, CRM, and more.
+              Ask questions about the uploaded document.
             </p>
           </div>
         )}

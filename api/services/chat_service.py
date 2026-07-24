@@ -5,9 +5,11 @@ from api.schemas.chat import ChatResponse, ChatTrace, HistoryMessage, HistoryRes
 
 
 def _ensure_ready() -> None:
-    if not chatbot.PINECONE_API_KEY or chatbot.vector_store is None:
+    store = chatbot.get_vector_store()
+    if not chatbot.PINECONE_API_KEY or store is None:
         raise RuntimeError(
-            "Pinecone is not configured. Set PINECONE_API_KEY and run ingest first."
+            "Pinecone is not configured or unreachable. "
+            "Check PINECONE_API_KEY, network, and that ingest has been run."
         )
     try:
         chatbot.mongo_client.admin.command("ping")

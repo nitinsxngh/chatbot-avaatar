@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -17,3 +17,8 @@ class IngestResponse(BaseModel):
     chunks: int
     index_name: str
     topic_distribution: dict
+    document_title: Optional[str] = None
+    domain: Optional[str] = None
+    assistant_role: Optional[str] = None
+    discovery_method: Optional[str] = None
+    topics: Dict[str, list] = Field(default_factory=dict)

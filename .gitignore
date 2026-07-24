@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+Documents/uploads/
 .cache/
 App/node_modules/
 App/.next/

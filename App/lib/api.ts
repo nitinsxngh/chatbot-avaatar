@@ -109,6 +109,11 @@ export type IngestResponse = {
   chunks: number;
   index_name: string;
   topic_distribution: Record<string, number>;
+  document_title?: string;
+  domain?: string;
+  assistant_role?: string;
+  discovery_method?: string;
+  topics?: Record<string, string[]>;
 };
 
 export const api = {
@@ -136,6 +141,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ pdf_path: pdf_path || null }),
     }),
+
+  uploadIngest: async (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE}/api/ingest/upload`, {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(detail || `Upload failed (${res.status})`);
+    }
+    return res.json() as Promise<IngestResponse>;
+  },
 
   sendMessage: (message: string, session_id?: string) =>
     request<ChatResponse>("/api/chat", {
