@@ -25,7 +25,11 @@ router = APIRouter()
 def chat(body: ChatRequest):
     """Send a message and receive a chatbot response."""
     try:
-        return send_message(body.message, body.session_id)
+        return send_message(
+            body.message,
+            session_name=body.session_name,
+            session_id=body.session_id,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
@@ -42,7 +46,11 @@ def chat_stream(body: ChatRequest):
 
     def event_generator():
         try:
-            for event in stream_message(body.message, body.session_id):
+            for event in stream_message(
+                body.message,
+                session_name=body.session_name,
+                session_id=body.session_id,
+            ):
                 payload = json.dumps(event, default=str)
                 yield f"data: {payload}\n\n"
         except Exception as exc:
@@ -61,19 +69,25 @@ def chat_stream(body: ChatRequest):
 
 
 @router.get("/history", response_model=HistoryResponse)
-def history(session_id: Optional[str] = Query(default=None)):
-    """Load chat history for a session."""
-    return get_session_history(session_id)
+def history(
+    session_name: Optional[str] = Query(default=None),
+    session_id: Optional[str] = Query(default=None),
+):
+    """Load chat history for a session (keyed by session_name)."""
+    return get_session_history(session_name=session_name, session_id=session_id)
 
 
 @router.delete("/history")
-def delete_history(session_id: Optional[str] = Query(default=None)):
-    """Clear chat history for a session."""
-    cleared = clear_session_history(session_id)
-    return {"session_id": cleared, "cleared": True}
+def delete_history(
+    session_name: Optional[str] = Query(default=None),
+    session_id: Optional[str] = Query(default=None),
+):
+    """Clear chat history for a session (config is preserved)."""
+    cleared = clear_session_history(session_name=session_name, session_id=session_id)
+    return {"session_name": cleared, "session_id": cleared, "cleared": True}
 
 
 @router.get("/sessions", response_model=SessionsResponse)
 def sessions():
-    """List known chat session IDs from MongoDB."""
+    """List known chat session names from MongoDB."""
     return {"sessions": list_sessions()}

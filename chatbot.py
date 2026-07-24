@@ -30,6 +30,14 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
 from utils.metadata_utils import build_metadata_filter, filter_label, load_document_profile
+from utils.session_store import (
+    ensure_indexes,
+    ensure_session,
+    get_session_config,
+    list_session_names,
+    normalize_session_name,
+    save_session_config,
+)
 from pymongo import MongoClient
 
 load_dotenv()
@@ -427,10 +435,16 @@ def get_vector_store(force_reload: bool = False):
 mongo_client = MongoClient(MONGODB_URI)
 mongo_collection = mongo_client[MONGODB_DB][MONGODB_COLLECTION]
 mongo_logs = mongo_client[MONGODB_DB][MONGODB_LOGS_COLLECTION]
+ensure_indexes(mongo_collection, mongo_logs)
 
-def load_history(session_id: str) -> list:
-    """Load chat history for a session from MongoDB."""
-    doc = mongo_collection.find_one({"session_id": session_id})
+
+def load_history(session_name: str) -> list:
+    """Load chat history for a session from MongoDB (keyed by session_name)."""
+    name = normalize_session_name(session_name, fallback=SESSION_ID)
+    ensure_session(mongo_collection, name)
+    doc = mongo_collection.find_one({"session_name": name}) or mongo_collection.find_one(
+        {"session_id": name}
+    )
     if not doc:
         return []
 
@@ -445,8 +459,15 @@ def load_history(session_id: str) -> list:
     return messages
 
 
-def save_history(session_id: str, messages: list) -> None:
-    """Save chat history for a session to MongoDB (trimmed)."""
+def save_history(
+    session_name: str,
+    messages: list,
+    config: Optional[dict] = None,
+) -> None:
+    """Save chat history for a session. session_name is the unique key."""
+    name = normalize_session_name(session_name, fallback=SESSION_ID)
+    ensure_session(mongo_collection, name, config=config)
+
     max_messages = MAX_HISTORY_TURNS * 2
     trimmed = messages[-max_messages:]
 
@@ -460,17 +481,38 @@ def save_history(session_id: str, messages: list) -> None:
             continue
         payload.append({"role": role, "content": msg.content})
 
+    update_fields = {
+        "session_name": name,
+        "session_id": name,
+        "messages": payload,
+        "updated_at": datetime.now(timezone.utc),
+    }
+    if config is not None:
+        update_fields["config"] = config
+
     mongo_collection.update_one(
-        {"session_id": session_id},
-        {
-            "$set": {
-                "session_id": session_id,
-                "messages": payload,
-                "updated_at": datetime.now(timezone.utc),
-            }
-        },
+        {"session_name": name},
+        {"$set": update_fields},
         upsert=True,
     )
+
+
+def apply_session_config(session_name: str) -> dict:
+    """Load per-session config and apply supported keys onto this module."""
+    import sys
+
+    name = normalize_session_name(session_name, fallback=SESSION_ID)
+    cfg = get_session_config(mongo_collection, name)
+    mod = sys.modules[__name__]
+    for key, value in cfg.items():
+        if hasattr(mod, key):
+            setattr(mod, key, value)
+    if any(k.startswith("ASSISTANT_") for k in cfg):
+        try:
+            refresh_assistant_prompts()
+        except Exception:
+            pass
+    return cfg
 
 
 chat_history: list = load_history(SESSION_ID)
@@ -819,34 +861,48 @@ def remember(
     question: str,
     answer: str,
     session_id: Optional[str] = None,
+    session_name: Optional[str] = None,
     history: Optional[list] = None,
 ) -> list:
     """Save this turn to MongoDB memory. Returns updated history."""
-    sid = session_id or SESSION_ID
+    name = normalize_session_name(
+        session_name or session_id,
+        fallback=SESSION_ID,
+    )
     history = list(history if history is not None else chat_history)
 
     history.append(HumanMessage(content=question))
     history.append(AIMessage(content=answer))
-    save_history(sid, history)
+    save_history(name, history)
 
     max_messages = MAX_HISTORY_TURNS * 2
     if len(history) > max_messages:
         history = history[-max_messages:]
-        save_history(sid, history)
+        save_history(name, history)
 
-    if sid == SESSION_ID:
+    if name == normalize_session_name(SESSION_ID):
         chat_history.clear()
         chat_history.extend(history)
 
     return history
 
 
-def log_turn(event: dict, session_id: Optional[str] = None) -> None:
+def log_turn(
+    event: dict,
+    session_id: Optional[str] = None,
+    session_name: Optional[str] = None,
+) -> None:
     """Persist a structured turn log to MongoDB (durable app logs)."""
-    sid = session_id or SESSION_ID
+    name = normalize_session_name(
+        session_name or session_id,
+        fallback=SESSION_ID,
+    )
+    # Avoid storing non-JSON-friendly nested objects twice
+    clean_event = {k: v for k, v in event.items() if k != "_id"}
     payload = {
-        **event,
-        "session_id": sid,
+        **clean_event,
+        "session_name": name,
+        "session_id": name,
         "assistant_name": ASSISTANT_NAME,
         "assistant_organisation": ASSISTANT_ORGANISATION,
         "created_at": datetime.now(timezone.utc),
@@ -874,6 +930,7 @@ def confidence_band(score: float) -> str:
 def ask(
     question: str,
     session_id: Optional[str] = None,
+    session_name: Optional[str] = None,
     return_meta: bool = False,
 ) -> Union[str, dict]:
     """
@@ -881,8 +938,12 @@ def ask(
                          YES → rewrite → Retriever → Reranker → GPT / clarify / low
                          NO  → Normal Chat
     """
-    sid = session_id or SESSION_ID
-    history = load_history(sid)
+    name = normalize_session_name(
+        session_name or session_id,
+        fallback=SESSION_ID,
+    )
+    apply_session_config(name)
+    history = load_history(name)
     started = time.perf_counter()
     trace: Optional[dict] = {"logs": [], "retrieval_attempts": []} if return_meta else None
 
@@ -890,17 +951,23 @@ def ask(
     if not question:
         answer = "Please type a question."
         if return_meta:
-            return {"answer": answer, "session_id": sid, "trace": trace}
+            return {
+                "answer": answer,
+                "session_id": name,
+                "session_name": name,
+                "trace": trace,
+            }
         return answer
 
     # Block obvious jailbreak / instruction-override attempts early
     if looks_like_injection(question):
         _trace(trace, "[security=prompt_injection_blocked]")
         answer = INJECTION_BLOCK_REPLY
-        remember(question, answer, session_id=sid, history=history)
+        remember(question, answer, session_name=name, history=history)
         meta = {
             "answer": answer,
-            "session_id": sid,
+            "session_id": name,
+            "session_name": name,
             "question": question,
             "intent": "blocked",
             "route": "SECURITY_BLOCK",
@@ -915,7 +982,7 @@ def ask(
             "security_blocked": True,
             "trace": trace,
         }
-        log_turn(meta, session_id=sid)
+        log_turn(meta, session_name=name)
         return meta if return_meta else answer
 
     safe_question = wrap_untrusted(question)
@@ -1083,10 +1150,11 @@ def ask(
             "max_retrieval_attempts": MAX_RETRIEVAL_ATTEMPTS,
         }
 
-    remember(question, answer, session_id=sid, history=history)
+    remember(question, answer, session_name=name, history=history)
     turn_meta = {
         "answer": answer,
-        "session_id": sid,
+        "session_id": name,
+        "session_name": name,
         "question": question,
         "intent": intent,
         "route": route,
@@ -1101,11 +1169,15 @@ def ask(
         "security_blocked": False,
         "trace": trace,
     }
-    log_turn(turn_meta, session_id=sid)
+    log_turn(turn_meta, session_name=name)
     return turn_meta if return_meta else answer
 
 
-def ask_stream(question: str, session_id: Optional[str] = None):
+def ask_stream(
+    question: str,
+    session_id: Optional[str] = None,
+    session_name: Optional[str] = None,
+):
     """
     Streaming variant of ask().
 
@@ -1115,8 +1187,12 @@ def ask_stream(question: str, session_id: Optional[str] = None):
       {"type": "done", "response": {...full ChatResponse meta...}}
       {"type": "error", "message": "..."}
     """
-    sid = session_id or SESSION_ID
-    history = load_history(sid)
+    name = normalize_session_name(
+        session_name or session_id,
+        fallback=SESSION_ID,
+    )
+    apply_session_config(name)
+    history = load_history(name)
     started = time.perf_counter()
     trace: dict = {"logs": [], "retrieval_attempts": []}
 
@@ -1128,7 +1204,8 @@ def ask_stream(question: str, session_id: Optional[str] = None):
             "type": "done",
             "response": {
                 "answer": answer,
-                "session_id": sid,
+                "session_id": name,
+                "session_name": name,
                 "intent": None,
                 "route": None,
                 "band": None,
@@ -1149,12 +1226,13 @@ def ask_stream(question: str, session_id: Optional[str] = None):
         _trace(trace, "[security=prompt_injection_blocked]")
         yield {"type": "status", "message": "Blocked unsafe request"}
         answer = INJECTION_BLOCK_REPLY
-        remember(question, answer, session_id=sid, history=history)
+        remember(question, answer, session_name=name, history=history)
         for ch in answer:
             yield {"type": "token", "content": ch}
         meta = {
             "answer": answer,
-            "session_id": sid,
+            "session_id": name,
+            "session_name": name,
             "question": question,
             "intent": "blocked",
             "route": "SECURITY_BLOCK",
@@ -1169,7 +1247,7 @@ def ask_stream(question: str, session_id: Optional[str] = None):
             "security_blocked": True,
             "trace": trace,
         }
-        log_turn(meta, session_id=sid)
+        log_turn(meta, session_name=name)
         yield {"type": "done", "response": meta}
         return
 
@@ -1351,10 +1429,11 @@ def ask_stream(question: str, session_id: Optional[str] = None):
         "max_retrieval_attempts": MAX_RETRIEVAL_ATTEMPTS,
     }
 
-    remember(question, answer, session_id=sid, history=history)
+    remember(question, answer, session_name=name, history=history)
     turn_meta = {
         "answer": answer,
-        "session_id": sid,
+        "session_id": name,
+        "session_name": name,
         "question": question,
         "intent": intent,
         "route": route,
@@ -1369,7 +1448,7 @@ def ask_stream(question: str, session_id: Optional[str] = None):
         "security_blocked": False,
         "trace": trace,
     }
-    log_turn(turn_meta, session_id=sid)
+    log_turn(turn_meta, session_name=name)
     yield {"type": "done", "response": turn_meta}
 
 

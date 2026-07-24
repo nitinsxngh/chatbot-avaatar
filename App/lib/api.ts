@@ -32,6 +32,8 @@ export type ConfigField = {
 
 export type ConfigResponse = {
   categories: Record<string, ConfigField[]>;
+  session_name?: string | null;
+  session_scoped?: boolean;
 };
 
 export type ChatMessage = {
@@ -81,6 +83,7 @@ export type ChatTrace = {
 
 export type ChatResponse = {
   answer: string;
+  session_name: string;
   session_id: string;
   intent?: string;
   route?: string;
@@ -116,25 +119,47 @@ export type IngestResponse = {
   topics?: Record<string, string[]>;
 };
 
+function sessionQuery(sessionName?: string) {
+  return sessionName ? `?session_name=${encodeURIComponent(sessionName)}` : "";
+}
+
 export const api = {
   health: () => request<{ status: string }>("/api/health"),
 
-  getConfig: () => request<ConfigResponse>("/api/config"),
+  getConfig: (sessionName?: string) =>
+    request<ConfigResponse>(`/api/config${sessionQuery(sessionName)}`),
 
-  updateConfig: (updates: Record<string, string | number | boolean>) =>
-    request<{ updated: string[]; config: ConfigResponse }>("/api/config", {
-      method: "PATCH",
-      body: JSON.stringify({ updates }),
-    }),
+  updateConfig: (
+    updates: Record<string, string | number | boolean>,
+    sessionName?: string,
+  ) =>
+    request<{ updated: string[]; config: ConfigResponse; session_name?: string }>(
+      "/api/config",
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          updates,
+          session_name: sessionName || null,
+        }),
+      },
+    ),
 
-  resetConfig: (options?: { keys?: string[]; include_secrets?: boolean }) =>
-    request<{ updated: string[]; config: ConfigResponse }>("/api/config/reset", {
-      method: "POST",
-      body: JSON.stringify({
-        keys: options?.keys ?? null,
-        include_secrets: options?.include_secrets ?? false,
-      }),
-    }),
+  resetConfig: (options?: {
+    keys?: string[];
+    include_secrets?: boolean;
+    sessionName?: string;
+  }) =>
+    request<{ updated: string[]; config: ConfigResponse; session_name?: string }>(
+      "/api/config/reset",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          keys: options?.keys ?? null,
+          include_secrets: options?.include_secrets ?? false,
+          session_name: options?.sessionName || null,
+        }),
+      },
+    ),
 
   runIngest: (pdf_path?: string) =>
     request<IngestResponse>("/api/ingest/run", {
@@ -156,20 +181,26 @@ export const api = {
     return res.json() as Promise<IngestResponse>;
   },
 
-  sendMessage: (message: string, session_id?: string) =>
+  sendMessage: (message: string, sessionName?: string) =>
     request<ChatResponse>("/api/chat", {
       method: "POST",
-      body: JSON.stringify({ message, session_id: session_id || null }),
+      body: JSON.stringify({
+        message,
+        session_name: sessionName || null,
+      }),
     }),
 
   streamMessage: async function* (
     message: string,
-    session_id?: string,
+    sessionName?: string,
   ): AsyncGenerator<StreamEvent, void> {
     const res = await fetch(`${API_BASE}/api/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, session_id: session_id || null }),
+      body: JSON.stringify({
+        message,
+        session_name: sessionName || null,
+      }),
     });
 
     if (!res.ok) {
@@ -210,20 +241,16 @@ export const api = {
     }
   },
 
-  getHistory: (session_id?: string) => {
-    const query = session_id ? `?session_id=${encodeURIComponent(session_id)}` : "";
-    return request<{ session_id: string; messages: ChatMessage[] }>(
-      `/api/chat/history${query}`,
-    );
-  },
+  getHistory: (sessionName?: string) =>
+    request<{ session_name: string; session_id: string; messages: ChatMessage[] }>(
+      `/api/chat/history${sessionQuery(sessionName)}`,
+    ),
 
-  clearHistory: (session_id?: string) => {
-    const query = session_id ? `?session_id=${encodeURIComponent(session_id)}` : "";
-    return request<{ session_id: string; cleared: boolean }>(
-      `/api/chat/history${query}`,
+  clearHistory: (sessionName?: string) =>
+    request<{ session_name: string; session_id: string; cleared: boolean }>(
+      `/api/chat/history${sessionQuery(sessionName)}`,
       { method: "DELETE" },
-    );
-  },
+    ),
 
   listSessions: () =>
     request<{ sessions: string[] }>("/api/chat/sessions"),

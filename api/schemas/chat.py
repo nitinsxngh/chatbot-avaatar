@@ -1,11 +1,24 @@
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
-    session_id: Optional[str] = Field(default=None)
+    session_name: Optional[str] = Field(
+        default=None,
+        description="Primary unique key for the chat session",
+    )
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Legacy alias for session_name",
+    )
+
+    @model_validator(mode="after")
+    def prefer_session_name(self):
+        if not self.session_name and self.session_id:
+            self.session_name = self.session_id
+        return self
 
 
 class RetrievalAttempt(BaseModel):
@@ -44,7 +57,8 @@ class ChatTrace(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
-    session_id: str
+    session_name: str
+    session_id: str  # same value as session_name (compat)
     intent: Optional[str] = None
     route: Optional[str] = None
     band: Optional[str] = None
@@ -65,6 +79,7 @@ class HistoryMessage(BaseModel):
 
 
 class HistoryResponse(BaseModel):
+    session_name: str
     session_id: str
     messages: List[HistoryMessage]
 

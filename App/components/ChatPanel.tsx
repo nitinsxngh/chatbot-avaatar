@@ -4,11 +4,17 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { api, ChatMessage, ChatResponse } from "@/lib/api";
 
 type ChatPanelProps = {
+  sessionName: string;
+  onSessionNameChange: (name: string) => void;
   onResponse: (meta: ChatResponse | null) => void;
 };
 
-export default function ChatPanel({ onResponse }: ChatPanelProps) {
-  const [sessionId, setSessionId] = useState("default");
+export default function ChatPanel({
+  sessionName,
+  onSessionNameChange,
+  onResponse,
+}: ChatPanelProps) {
+  const [draftName, setDraftName] = useState(sessionName);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streamingText, setStreamingText] = useState("");
@@ -16,10 +22,19 @@ export default function ChatPanel({ onResponse }: ChatPanelProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const skipNextHistoryLoad = useRef(false);
 
   useEffect(() => {
+    setDraftName(sessionName);
+  }, [sessionName]);
+
+  useEffect(() => {
+    if (skipNextHistoryLoad.current) {
+      skipNextHistoryLoad.current = false;
+      return;
+    }
     loadHistory();
-  }, [sessionId]);
+  }, [sessionName]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -28,7 +43,7 @@ export default function ChatPanel({ onResponse }: ChatPanelProps) {
   async function loadHistory() {
     try {
       setError("");
-      const data = await api.getHistory(sessionId);
+      const data = await api.getHistory(sessionName);
       setMessages(data.messages);
       onResponse(null);
     } catch (err) {
@@ -36,10 +51,26 @@ export default function ChatPanel({ onResponse }: ChatPanelProps) {
     }
   }
 
+  function commitSessionName(raw: string) {
+    const next = raw.trim() || "default";
+    if (next !== sessionName) {
+      onSessionNameChange(next);
+    }
+    setDraftName(next);
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const text = input.trim();
     if (!text || loading) return;
+
+    // Ensure edits to the session name field are applied before chatting
+    const activeSession = draftName.trim() || sessionName || "default";
+    if (activeSession !== sessionName) {
+      skipNextHistoryLoad.current = true;
+      onSessionNameChange(activeSession);
+      setDraftName(activeSession);
+    }
 
     setInput("");
     setLoading(true);
@@ -50,7 +81,7 @@ export default function ChatPanel({ onResponse }: ChatPanelProps) {
 
     try {
       let assembled = "";
-      for await (const event of api.streamMessage(text, sessionId)) {
+      for await (const event of api.streamMessage(text, activeSession)) {
         if (event.type === "status") {
           setStatus(event.message);
         } else if (event.type === "token") {
@@ -59,6 +90,9 @@ export default function ChatPanel({ onResponse }: ChatPanelProps) {
           setStatus("");
         } else if (event.type === "done") {
           onResponse(event.response);
+          if (event.response.session_name) {
+            onSessionNameChange(event.response.session_name);
+          }
           setMessages((prev) => [
             ...prev,
             { role: "ai", content: event.response.answer || assembled },
@@ -80,7 +114,7 @@ export default function ChatPanel({ onResponse }: ChatPanelProps) {
 
   async function handleClear() {
     try {
-      await api.clearHistory(sessionId);
+      await api.clearHistory(sessionName);
       setMessages([]);
       setStreamingText("");
       setStatus("");
@@ -92,8 +126,9 @@ export default function ChatPanel({ onResponse }: ChatPanelProps) {
   }
 
   function handleNewSession() {
-    const id = `session-${Date.now()}`;
-    setSessionId(id);
+    const name = `session-${Date.now()}`;
+    onSessionNameChange(name);
+    setDraftName(name);
     setMessages([]);
     setStreamingText("");
     setStatus("");
@@ -107,10 +142,18 @@ export default function ChatPanel({ onResponse }: ChatPanelProps) {
       <div className="flex flex-wrap items-center gap-2 border-b border-black/[0.06] px-4 py-2">
         <h2 className="mr-auto text-[14px] font-semibold text-[#1d1d1f]">RAG</h2>
         <input
-          value={sessionId}
-          onChange={(e) => setSessionId(e.target.value)}
-          className="apple-input max-w-[160px] py-1.5 text-[13px]"
-          placeholder="Session ID"
+          value={draftName}
+          onChange={(e) => setDraftName(e.target.value)}
+          onBlur={() => commitSessionName(draftName)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitSessionName(draftName);
+            }
+          }}
+          className="apple-input max-w-[180px] py-1.5 text-[13px]"
+          placeholder="Session name"
+          title="Session name (unique key)"
         />
         <button type="button" onClick={handleNewSession} className="apple-btn-secondary text-[13px]">
           New

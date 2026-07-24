@@ -8,16 +8,21 @@ import { Card } from "@/components/ui";
 import { ChatResponse } from "@/lib/api";
 
 export default function RagPage() {
+  const [sessionName, setSessionName] = useState("default");
   const [responseMeta, setResponseMeta] = useState<ChatResponse | null>(null);
 
   return (
     <div className="grid min-h-0 flex-1 gap-2 overflow-hidden lg:grid-cols-[260px_1fr_280px]">
       <Card className="flex min-h-0 flex-col overflow-hidden !rounded-[2px] p-0">
-        <ConfigPanel />
+        <ConfigPanel sessionName={sessionName} />
       </Card>
 
       <Card className="flex min-h-0 flex-col overflow-hidden !rounded-[2px] p-0">
-        <ChatPanel onResponse={setResponseMeta} />
+        <ChatPanel
+          sessionName={sessionName}
+          onSessionNameChange={setSessionName}
+          onResponse={setResponseMeta}
+        />
       </Card>
 
       <Card className="flex min-h-0 flex-col overflow-hidden !rounded-[2px] p-0">

@@ -16,7 +16,12 @@ const CATEGORY_LABELS: Record<string, string> = {
   langsmith: "LangSmith",
 };
 
-export default function ConfigPanel() {
+type ConfigPanelProps = {
+  /** When set, load/save config for this session in MongoDB */
+  sessionName?: string;
+};
+
+export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
   const [categories, setCategories] = useState<Record<string, ConfigField[]>>({});
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -29,13 +34,13 @@ export default function ConfigPanel() {
 
   useEffect(() => {
     loadConfig();
-  }, []);
+  }, [sessionName]);
 
   async function loadConfig() {
     setLoading(true);
     setError("");
     try {
-      const data = await api.getConfig();
+      const data = await api.getConfig(sessionName);
       setCategories(data.categories);
       setDraft({});
       setFormKey((k) => k + 1);
@@ -80,11 +85,15 @@ export default function ConfigPanel() {
     }
 
     try {
-      const result = await api.updateConfig(updates);
+      const result = await api.updateConfig(updates, sessionName);
       setCategories(result.config.categories);
       setDraft({});
       setFormKey((k) => k + 1);
-      setMessage(`Saved ${result.updated.length} setting${result.updated.length === 1 ? "" : "s"}.`);
+      setMessage(
+        `Saved ${result.updated.length} setting${result.updated.length === 1 ? "" : "s"}${
+          sessionName ? ` for “${sessionName}”` : ""
+        }.`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save");
     } finally {
@@ -94,7 +103,9 @@ export default function ConfigPanel() {
 
   async function handleResetAll() {
     const ok = window.confirm(
-      "Reset all settings to defaults?\n\nAPI keys (OpenAI, Pinecone, LangSmith) will be kept.",
+      sessionName
+        ? `Reset settings for session “${sessionName}” to defaults?`
+        : "Reset all settings to defaults?\n\nAPI keys (OpenAI, Pinecone, LangSmith) will be kept.",
     );
     if (!ok) return;
 
@@ -103,7 +114,7 @@ export default function ConfigPanel() {
     setError("");
 
     try {
-      const result = await api.resetConfig();
+      const result = await api.resetConfig({ sessionName });
       setCategories(result.config.categories);
       setDraft({});
       setFormKey((k) => k + 1);
@@ -133,7 +144,10 @@ export default function ConfigPanel() {
     setError("");
 
     try {
-      const result = await api.resetConfig({ keys: fields.map((f) => f.key) });
+      const result = await api.resetConfig({
+        keys: fields.map((f) => f.key),
+        sessionName,
+      });
       setCategories(result.config.categories);
       setDraft({});
       setFormKey((k) => k + 1);
@@ -159,7 +173,11 @@ export default function ConfigPanel() {
     <form key={formKey} onSubmit={handleSubmit} className="flex h-full flex-col">
       <div className="border-b border-black/[0.06] px-4 py-2">
         <h2 className="text-[14px] font-semibold text-[#1d1d1f]">Settings</h2>
-        <p className="text-[11px] text-[#86868b]">Configure the assistant</p>
+        <p className="text-[11px] text-[#86868b]">
+          {sessionName
+            ? `Session “${sessionName}”`
+            : "Configure the assistant"}
+        </p>
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 py-2">
