@@ -1,0 +1,484 @@
+{
+  "version": 1,
+  "name": "Complete API + MySQL demo (open data)",
+  "updatedAt": "2026-07-27T04:00:00.000Z",
+  "nodes": [
+    {
+      "id": "pageName-start",
+      "type": "pageName",
+      "position": { "x": 0, "y": 420 },
+      "data": {
+        "pageName": "start",
+        "description": "Full demo — open JSONPlaceholder API + dummy MySQL",
+        "isEntry": true
+      }
+    },
+    {
+      "id": "message-welcome",
+      "type": "message",
+      "position": { "x": 260, "y": 420 },
+      "data": {
+        "label": "Welcome",
+        "text": "Hi! This demo uses every flow node. Try API (open JSONPlaceholder), MySQL (remote demo_products table), docs, or type a free question."
+      }
+    },
+    {
+      "id": "intent-main",
+      "type": "intent",
+      "position": { "x": 540, "y": 340 },
+      "data": {
+        "label": "Main menu",
+        "prompt": "What would you like to try?",
+        "options": [
+          {
+            "id": "intent-api-user",
+            "label": "Lookup user (API)",
+            "keywords": "user, api, lookup, profile, jsonplaceholder"
+          },
+          {
+            "id": "intent-api-posts",
+            "label": "List posts (API)",
+            "keywords": "posts, articles, blog, feed"
+          },
+          {
+            "id": "intent-mysql",
+            "label": "MySQL demo",
+            "keywords": "mysql, database, sql, db"
+          },
+          {
+            "id": "intent-ask",
+            "label": "Ask a question",
+            "keywords": "ask, help, question"
+          },
+          {
+            "id": "intent-done",
+            "label": "Done",
+            "keywords": "bye, goodbye, exit, quit, done, thanks"
+          }
+        ]
+      }
+    },
+    {
+      "id": "question-user-id",
+      "type": "question",
+      "position": { "x": 920, "y": 40 },
+      "data": {
+        "label": "Ask user id",
+        "prompt": "Enter a user id from 1–10 (open JSONPlaceholder demo data).",
+        "variableName": "user_id"
+      }
+    },
+    {
+      "id": "api-get-user",
+      "type": "api",
+      "position": { "x": 1200, "y": 40 },
+      "data": {
+        "label": "GET /users/:id",
+        "method": "GET",
+        "connectionString": "https://jsonplaceholder.typicode.com",
+        "path": "/users/{{user_id}}",
+        "headersJson": "{\n  \"Accept\": \"application/json\"\n}",
+        "body": "",
+        "responsePath": "name",
+        "variableName": "api",
+        "showInChat": true
+      }
+    },
+    {
+      "id": "message-user-result",
+      "type": "message",
+      "position": { "x": 1480, "y": 40 },
+      "data": {
+        "label": "Show user",
+        "text": "Open API result — name: {{api}}. Email stored as part of body. Status: {{api_status}}."
+      }
+    },
+    {
+      "id": "api-list-posts",
+      "type": "api",
+      "position": { "x": 920, "y": 220 },
+      "data": {
+        "label": "GET /posts",
+        "method": "GET",
+        "connectionString": "https://jsonplaceholder.typicode.com",
+        "path": "/posts?_limit=3",
+        "headersJson": "{\n  \"Accept\": \"application/json\"\n}",
+        "body": "",
+        "responsePath": "0.title",
+        "variableName": "posts",
+        "showInChat": true
+      }
+    },
+    {
+      "id": "message-posts-result",
+      "type": "message",
+      "position": { "x": 1200, "y": 220 },
+      "data": {
+        "label": "Show posts",
+        "text": "First demo post title: {{posts}}. (Pulled from open JSONPlaceholder data.)"
+      }
+    },
+    {
+      "id": "message-mysql-intro",
+      "type": "message",
+      "position": { "x": 920, "y": 400 },
+      "data": {
+        "label": "MySQL intro",
+        "text": "Running a query against the remote demo_products table (6 sample products seeded for this demo)."
+      }
+    },
+    {
+      "id": "mysql-demo",
+      "type": "mysql",
+      "position": { "x": 1200, "y": 400 },
+      "data": {
+        "label": "List products",
+        "host": "sql12.freesqldatabase.com",
+        "port": "3306",
+        "database": "sql12833988",
+        "user": "sql12833988",
+        "password": "jLyF9ssqqu",
+        "sql": "SELECT id, name, price, category FROM demo_products ORDER BY id LIMIT 1",
+        "resultMode": "first_row",
+        "mapColumnsToVars": true,
+        "variableName": "db",
+        "showInChat": true
+      }
+    },
+    {
+      "id": "message-mysql-result",
+      "type": "message",
+      "position": { "x": 1480, "y": 400 },
+      "data": {
+        "label": "MySQL result",
+        "text": "MySQL product: {{db_name}} — ${{db_price}} ({{db_category}}). Row id={{db_id}}. Full row: {{db}}."
+      }
+    },
+    {
+      "id": "question-help",
+      "type": "question",
+      "position": { "x": 920, "y": 580 },
+      "data": {
+        "label": "Free-text question",
+        "prompt": "What do you need help with? (Try words like help / how, or something else.)",
+        "variableName": "user_topic"
+      }
+    },
+    {
+      "id": "condition-help",
+      "type": "condition",
+      "position": { "x": 1200, "y": 580 },
+      "data": {
+        "label": "Needs help?",
+        "keywords": "help, issue, how, what, support, yes, problem"
+      }
+    },
+    {
+      "id": "message-match",
+      "type": "message",
+      "position": { "x": 1480, "y": 520 },
+      "data": {
+        "label": "Condition match",
+        "text": "You asked about “{{user_topic}}”. Checking knowledge base…"
+      }
+    },
+    {
+      "id": "knowledge-topic",
+      "type": "knowledge",
+      "position": { "x": 1760, "y": 520 },
+      "data": {
+        "label": "RAG on topic",
+        "queryHint": "{{user_topic}}"
+      }
+    },
+    {
+      "id": "message-else",
+      "type": "message",
+      "position": { "x": 1480, "y": 680 },
+      "data": {
+        "label": "Condition else",
+        "text": "No help keyword in “{{user_topic}}”. Pick another menu option, or type freely for Fallback."
+      }
+    },
+    {
+      "id": "fallback-rag",
+      "type": "fallback",
+      "position": { "x": 920, "y": 760 },
+      "data": {
+        "label": "Unmatched free-text",
+        "message": "",
+        "runRag": true
+      }
+    },
+    {
+      "id": "message-loop",
+      "type": "message",
+      "position": { "x": 1200, "y": 760 },
+      "data": {
+        "label": "Continue?",
+        "text": "Anything else? Pick a chip or type another question."
+      }
+    },
+    {
+      "id": "message-done",
+      "type": "message",
+      "position": { "x": 920, "y": 920 },
+      "data": {
+        "label": "Closing",
+        "text": "Wrapping up the API / MySQL demo. Thanks!"
+      }
+    },
+    {
+      "id": "end-bye",
+      "type": "end",
+      "position": { "x": 1200, "y": 920 },
+      "data": {
+        "label": "End",
+        "farewell": "Goodbye — import this flow anytime to retest connectors."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-start-welcome",
+      "type": "flow",
+      "source": "pageName-start",
+      "target": "message-welcome",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-welcome-intent",
+      "type": "flow",
+      "source": "message-welcome",
+      "target": "intent-main",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-intent-api-user",
+      "type": "flow",
+      "source": "intent-main",
+      "sourceHandle": "intent-api-user",
+      "target": "question-user-id",
+      "label": "Lookup user (API)",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-qid-api",
+      "type": "flow",
+      "source": "question-user-id",
+      "target": "api-get-user",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-api-user-msg",
+      "type": "flow",
+      "source": "api-get-user",
+      "target": "message-user-result",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-user-loop",
+      "type": "flow",
+      "source": "message-user-result",
+      "target": "message-loop",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-intent-posts",
+      "type": "flow",
+      "source": "intent-main",
+      "sourceHandle": "intent-api-posts",
+      "target": "api-list-posts",
+      "label": "List posts (API)",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-posts-msg",
+      "type": "flow",
+      "source": "api-list-posts",
+      "target": "message-posts-result",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-posts-loop",
+      "type": "flow",
+      "source": "message-posts-result",
+      "target": "message-loop",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-intent-mysql",
+      "type": "flow",
+      "source": "intent-main",
+      "sourceHandle": "intent-mysql",
+      "target": "message-mysql-intro",
+      "label": "MySQL demo",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-mysql-intro-node",
+      "type": "flow",
+      "source": "message-mysql-intro",
+      "target": "mysql-demo",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-mysql-msg",
+      "type": "flow",
+      "source": "mysql-demo",
+      "target": "message-mysql-result",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-mysql-loop",
+      "type": "flow",
+      "source": "message-mysql-result",
+      "target": "message-loop",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-intent-ask",
+      "type": "flow",
+      "source": "intent-main",
+      "sourceHandle": "intent-ask",
+      "target": "question-help",
+      "label": "Ask a question",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-q-cond",
+      "type": "flow",
+      "source": "question-help",
+      "target": "condition-help",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-cond-match",
+      "type": "flow",
+      "source": "condition-help",
+      "sourceHandle": "match",
+      "target": "message-match",
+      "label": "match",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-cond-else",
+      "type": "flow",
+      "source": "condition-help",
+      "sourceHandle": "else",
+      "target": "message-else",
+      "label": "else",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-match-rag",
+      "type": "flow",
+      "source": "message-match",
+      "target": "knowledge-topic",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-rag-loop",
+      "type": "flow",
+      "source": "knowledge-topic",
+      "target": "message-loop",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-else-loop",
+      "type": "flow",
+      "source": "message-else",
+      "target": "message-loop",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-fallback",
+      "type": "flow",
+      "source": "intent-main",
+      "sourceHandle": "fallback",
+      "target": "fallback-rag",
+      "label": "fallback",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-fb-loop",
+      "type": "flow",
+      "source": "fallback-rag",
+      "target": "message-loop",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-loop-intent",
+      "type": "flow",
+      "source": "message-loop",
+      "target": "intent-main",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-intent-done",
+      "type": "flow",
+      "source": "intent-main",
+      "sourceHandle": "intent-done",
+      "target": "message-done",
+      "label": "Done",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-done-end",
+      "type": "flow",
+      "source": "message-done",
+      "target": "end-bye",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    }
+  ]
+}

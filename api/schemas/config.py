@@ -36,6 +36,7 @@ class ConfigField(BaseModel):
     default: Any = None
     has_value: bool
     secret: bool
+    editable: bool = True
 
 
 class ConfigResponse(BaseModel):

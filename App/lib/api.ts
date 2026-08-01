@@ -28,6 +28,7 @@ export type ConfigField = {
   default?: string | number | boolean;
   has_value: boolean;
   secret: boolean;
+  editable?: boolean;
 };
 
 export type ConfigResponse = {
@@ -254,4 +255,46 @@ export const api = {
 
   listSessions: () =>
     request<{ sessions: string[] }>("/api/chat/sessions"),
+
+  executeFlowHttp: (body: {
+    method: string;
+    url: string;
+    headers?: Record<string, string>;
+    body?: string | null;
+    timeout_seconds?: number;
+  }) =>
+    request<{
+      ok: boolean;
+      status: number;
+      body: string;
+      json_data: unknown;
+      error: string | null;
+    }>("/api/flow/http", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  executeFlowMysql: (body: {
+    host: string;
+    port: number;
+    database: string;
+    user: string;
+    password: string;
+    sql: string;
+    result_mode: string;
+    max_rows?: number;
+  }) =>
+    request<{
+      ok: boolean;
+      rows: Record<string, unknown>[];
+      columns: string[];
+      row_count: number;
+      scalar: unknown;
+      first_row: Record<string, unknown> | null;
+      preview: string;
+      error: string | null;
+    }>("/api/flow/mysql", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 };

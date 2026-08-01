@@ -1,0 +1,336 @@
+{
+  "version": 1,
+  "name": "Complete smart assistant",
+  "updatedAt": "2026-07-25T14:20:00.000Z",
+  "nodes": [
+    {
+      "id": "pageName-start",
+      "type": "pageName",
+      "position": { "x": 0, "y": 360 },
+      "data": {
+        "pageName": "start",
+        "description": "Entry — full smart demo of every node",
+        "isEntry": true
+      }
+    },
+    {
+      "id": "message-welcome",
+      "type": "message",
+      "position": { "x": 260, "y": 360 },
+      "data": {
+        "label": "Welcome",
+        "text": "Hi! I’m your smart support assistant. Pick a topic below, or type your own question anytime."
+      }
+    },
+    {
+      "id": "intent-main",
+      "type": "intent",
+      "position": { "x": 540, "y": 280 },
+      "data": {
+        "label": "Main menu",
+        "prompt": "What would you like to do?",
+        "options": [
+          {
+            "id": "intent-pricing",
+            "label": "Pricing",
+            "keywords": "price, cost, plan, plans, pricing, subscription, fee"
+          },
+          {
+            "id": "intent-ask",
+            "label": "Ask a question",
+            "keywords": "ask, question, help me, inquire"
+          },
+          {
+            "id": "intent-docs",
+            "label": "Browse docs",
+            "keywords": "docs, documentation, guide, manual, overview"
+          },
+          {
+            "id": "intent-done",
+            "label": "Done",
+            "keywords": "bye, goodbye, exit, quit, done, thanks, thank you"
+          }
+        ]
+      }
+    },
+    {
+      "id": "message-pricing",
+      "type": "message",
+      "position": { "x": 920, "y": 40 },
+      "data": {
+        "label": "Pricing reply",
+        "text": "Our plans start at $29/month with a free trial. Teams get priority support. Want something else, or type a free-text question?"
+      }
+    },
+    {
+      "id": "question-details",
+      "type": "question",
+      "position": { "x": 920, "y": 200 },
+      "data": {
+        "label": "Capture question",
+        "prompt": "What do you need help with? (Try words like help, issue, how… or type something else.)",
+        "variableName": "user_topic"
+      }
+    },
+    {
+      "id": "condition-help",
+      "type": "condition",
+      "position": { "x": 1200, "y": 200 },
+      "data": {
+        "label": "Needs help?",
+        "keywords": "help, issue, problem, how, what, why, support, broken, error, yes"
+      }
+    },
+    {
+      "id": "message-match",
+      "type": "message",
+      "position": { "x": 1480, "y": 100 },
+      "data": {
+        "label": "Condition match",
+        "text": "Got it — you asked about “{{user_topic}}”. Looking that up in our knowledge base…"
+      }
+    },
+    {
+      "id": "knowledge-topic",
+      "type": "knowledge",
+      "position": { "x": 1760, "y": 100 },
+      "data": {
+        "label": "RAG on topic",
+        "queryHint": "{{user_topic}}"
+      }
+    },
+    {
+      "id": "message-else",
+      "type": "message",
+      "position": { "x": 1480, "y": 300 },
+      "data": {
+        "label": "Condition else",
+        "text": "I didn’t detect a help keyword in “{{user_topic}}”. You can pick another menu option, or type freely for Fallback."
+      }
+    },
+    {
+      "id": "knowledge-docs",
+      "type": "knowledge",
+      "position": { "x": 920, "y": 420 },
+      "data": {
+        "label": "Browse docs",
+        "queryHint": "product overview getting started documentation"
+      }
+    },
+    {
+      "id": "fallback-rag",
+      "type": "fallback",
+      "position": { "x": 920, "y": 580 },
+      "data": {
+        "label": "Unmatched free-text",
+        "message": "",
+        "runRag": true
+      }
+    },
+    {
+      "id": "message-loop",
+      "type": "message",
+      "position": { "x": 1200, "y": 480 },
+      "data": {
+        "label": "Continue?",
+        "text": "Anything else? Pick a chip, or type another question."
+      }
+    },
+    {
+      "id": "message-done",
+      "type": "message",
+      "position": { "x": 920, "y": 740 },
+      "data": {
+        "label": "Closing",
+        "text": "Alright — wrapping up this session. Thanks for chatting!"
+      }
+    },
+    {
+      "id": "end-bye",
+      "type": "end",
+      "position": { "x": 1200, "y": 740 },
+      "data": {
+        "label": "End",
+        "farewell": "Goodbye! Come back anytime if you need help."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-start-welcome",
+      "type": "flow",
+      "source": "pageName-start",
+      "target": "message-welcome",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-welcome-intent",
+      "type": "flow",
+      "source": "message-welcome",
+      "target": "intent-main",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-intent-pricing",
+      "type": "flow",
+      "source": "intent-main",
+      "sourceHandle": "intent-pricing",
+      "target": "message-pricing",
+      "label": "Pricing",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-pricing-loop",
+      "type": "flow",
+      "source": "message-pricing",
+      "target": "message-loop",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-intent-ask",
+      "type": "flow",
+      "source": "intent-main",
+      "sourceHandle": "intent-ask",
+      "target": "question-details",
+      "label": "Ask a question",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-question-condition",
+      "type": "flow",
+      "source": "question-details",
+      "target": "condition-help",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-condition-match",
+      "type": "flow",
+      "source": "condition-help",
+      "sourceHandle": "match",
+      "target": "message-match",
+      "label": "match",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-condition-else",
+      "type": "flow",
+      "source": "condition-help",
+      "sourceHandle": "else",
+      "target": "message-else",
+      "label": "else",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-match-knowledge",
+      "type": "flow",
+      "source": "message-match",
+      "target": "knowledge-topic",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-knowledge-loop",
+      "type": "flow",
+      "source": "knowledge-topic",
+      "target": "message-loop",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-else-loop",
+      "type": "flow",
+      "source": "message-else",
+      "target": "message-loop",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-intent-docs",
+      "type": "flow",
+      "source": "intent-main",
+      "sourceHandle": "intent-docs",
+      "target": "knowledge-docs",
+      "label": "Browse docs",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-docs-loop",
+      "type": "flow",
+      "source": "knowledge-docs",
+      "target": "message-loop",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-intent-fallback",
+      "type": "flow",
+      "source": "intent-main",
+      "sourceHandle": "fallback",
+      "target": "fallback-rag",
+      "label": "fallback",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-fallback-loop",
+      "type": "flow",
+      "source": "fallback-rag",
+      "target": "message-loop",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-loop-intent",
+      "type": "flow",
+      "source": "message-loop",
+      "target": "intent-main",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-intent-done",
+      "type": "flow",
+      "source": "intent-main",
+      "sourceHandle": "intent-done",
+      "target": "message-done",
+      "label": "Done",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    },
+    {
+      "id": "e-done-end",
+      "type": "flow",
+      "source": "message-done",
+      "target": "end-bye",
+      "animated": true,
+      "reconnectable": true,
+      "style": { "stroke": "#86868b", "strokeWidth": 1.5 }
+    }
+  ]
+}

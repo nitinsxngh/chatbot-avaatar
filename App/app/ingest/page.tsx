@@ -42,7 +42,7 @@ export default function IngestPage() {
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+    <div className="mx-auto min-h-0 w-full max-w-[1280px] flex-1 overflow-y-auto px-3 pb-4 pt-2 sm:px-4">
       <PageHeader
         title="Ingest"
         description="Upload any PDF. Topics and assistant role are discovered automatically for that document."

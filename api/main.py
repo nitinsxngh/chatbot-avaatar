@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import chat, config, ingest
+from api.routers import chat, config, flow, ingest
 
 app = FastAPI(
     title="Chatbot Avatar API",
@@ -25,6 +25,7 @@ app.add_middleware(
 app.include_router(ingest.router, prefix="/api/ingest", tags=["Ingest"])
 app.include_router(config.router, prefix="/api/config", tags=["Config"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
+app.include_router(flow.router, prefix="/api/flow", tags=["Flow"])
 
 
 @app.get("/api/health")

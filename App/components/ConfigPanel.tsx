@@ -57,6 +57,10 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
   );
 
   function handleChange(key: string, value: string) {
+    const field = Object.values(categories)
+      .flat()
+      .find((item) => item.key === key);
+    if (field && field.editable === false) return;
     setDraft((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -76,12 +80,18 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
       const field = Object.values(categories)
         .flat()
         .find((item) => item.key === key);
-      if (!field) continue;
+      if (!field || field.editable === false) continue;
 
       if (field.type === "int") updates[key] = Number(value);
       else if (field.type === "float") updates[key] = Number(value);
       else if (field.type === "bool") updates[key] = value === "true";
       else updates[key] = value;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      setSaving(false);
+      setMessage("No editable changes.");
+      return;
     }
 
     try {
@@ -104,7 +114,7 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
   async function handleResetAll() {
     const ok = window.confirm(
       sessionName
-        ? `Reset settings for session “${sessionName}” to defaults?`
+        ? `Reset editable session settings for “${sessionName}” to defaults?\n\nGlobal settings (API keys, MongoDB, ingest) are unchanged.`
         : "Reset all settings to defaults?\n\nAPI keys (OpenAI, Pinecone, LangSmith) will be kept.",
     );
     if (!ok) return;
@@ -129,14 +139,16 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
   }
 
   async function handleResetCategory(category: string) {
-    const fields = (categories[category] || []).filter((f) => !f.secret);
+    const fields = (categories[category] || []).filter(
+      (f) => !f.secret && f.editable !== false,
+    );
     if (fields.length === 0) {
-      setMessage("Nothing to reset in this section.");
+      setMessage("Nothing editable to reset in this section.");
       return;
     }
 
     const label = CATEGORY_LABELS[category] || category;
-    const ok = window.confirm(`Reset “${label}” settings to defaults?`);
+    const ok = window.confirm(`Reset “${label}” editable settings to defaults?`);
     if (!ok) return;
 
     setResetting(true);
@@ -175,7 +187,7 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
         <h2 className="text-[14px] font-semibold text-[#1d1d1f]">Settings</h2>
         <p className="text-[11px] text-[#86868b]">
           {sessionName
-            ? `Session “${sessionName}”`
+            ? `Session “${sessionName}” · grey fields are global (read-only)`
             : "Configure the assistant"}
         </p>
       </div>
@@ -183,6 +195,9 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
       <div className="flex-1 overflow-y-auto px-2 py-2">
         {orderedCategories.map((category) => {
           const isOpen = expanded === category;
+          const editableInCategory = (categories[category] || []).some(
+            (f) => f.editable !== false && !f.secret,
+          );
           return (
             <div key={category} className="mb-1">
               <div className="flex items-center gap-1">
@@ -194,13 +209,13 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
                   {CATEGORY_LABELS[category] || category}
                   <span className="text-[12px] text-[#86868b]">{isOpen ? "−" : "+"}</span>
                 </button>
-                {isOpen && (
+                {isOpen && editableInCategory && (
                   <button
                     type="button"
                     disabled={busy}
                     onClick={() => handleResetCategory(category)}
                     className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-medium text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f] disabled:opacity-40"
-                    title="Reset this section to defaults"
+                    title="Reset editable fields in this section"
                   >
                     Reset
                   </button>
@@ -209,55 +224,72 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
 
               {isOpen && (
                 <div className="space-y-3 px-3 pb-3 pt-1">
-                  {(categories[category] || []).map((field) => (
-                    <label key={field.key} className="block">
-                      <span className="mb-1 flex items-center justify-between gap-2 text-[12px] font-medium text-[#86868b]">
-                        <span>{field.label}</span>
-                        {field.default !== undefined &&
-                          !field.secret &&
-                          String(field.value) !== String(field.default) && (
-                            <span className="font-normal text-[#86868b]/70">
-                              default: {String(field.default)}
-                            </span>
-                          )}
-                      </span>
-                      {field.type === "bool" ? (
-                        <select
-                          value={draft[field.key] ?? String(field.value)}
-                          onChange={(e) => handleChange(field.key, e.target.value)}
-                          className="apple-input py-2 text-[13px]"
-                        >
-                          <option value="true">True</option>
-                          <option value="false">False</option>
-                        </select>
-                      ) : (
-                        <input
-                          type={
-                            field.secret
-                              ? "password"
-                              : field.type === "int" || field.type === "float"
-                                ? "number"
-                                : "text"
-                          }
-                          step={field.type === "float" ? "any" : undefined}
-                          defaultValue={
-                            field.secret && field.has_value
-                              ? ""
-                              : String(field.value ?? "")
-                          }
-                          placeholder={
-                            field.secret && field.has_value
-                              ? String(field.value)
-                              : field.default !== undefined
-                                ? String(field.default)
-                                : field.key
-                          }
-                          onChange={(e) => handleChange(field.key, e.target.value)}
-                          className="apple-input py-2 text-[13px]"
-                        />
-                      )}
-                    </label>
-                  ))}
+                  {(categories[category] || []).map((field) => {
+                    const editable = field.editable !== false;
+                    return (
+                      <label
+                        key={field.key}
+                        className={`block ${editable ? "" : "opacity-70"}`}
+                      >
+                        <span className="mb-1 flex items-center justify-between gap-2 text-[12px] font-medium text-[#86868b]">
+                          <span>
+                            {field.label}
+                            {!editable && (
+                              <span className="ml-1 font-normal text-[#86868b]/60">
+                                (global)
+                              </span>
+                            )}
+                          </span>
+                          {editable &&
+                            field.default !== undefined &&
+                            !field.secret &&
+                            String(field.value) !== String(field.default) && (
+                              <span className="font-normal text-[#86868b]/70">
+                                default: {String(field.default)}
+                              </span>
+                            )}
+                        </span>
+                        {field.type === "bool" ? (
+                          <select
+                            value={draft[field.key] ?? String(field.value)}
+                            onChange={(e) => handleChange(field.key, e.target.value)}
+                            disabled={!editable || busy}
+                            className="apple-input py-2 text-[13px] disabled:cursor-not-allowed disabled:bg-[#f5f5f7]"
+                          >
+                            <option value="true">True</option>
+                            <option value="false">False</option>
+                          </select>
+                        ) : (
+                          <input
+                            type={
+                              field.secret
+                                ? "password"
+                                : field.type === "int" || field.type === "float"
+                                  ? "number"
+                                  : "text"
+                            }
+                            step={field.type === "float" ? "any" : undefined}
+                            readOnly={!editable}
+                            disabled={!editable || busy}
+                            defaultValue={
+                              field.secret && field.has_value
+                                ? ""
+                                : String(field.value ?? "")
+                            }
+                            placeholder={
+                              field.secret && field.has_value
+                                ? String(field.value)
+                                : field.default !== undefined
+                                  ? String(field.default)
+                                  : field.key
+                            }
+                            onChange={(e) => handleChange(field.key, e.target.value)}
+                            className="apple-input py-2 text-[13px] disabled:cursor-not-allowed disabled:bg-[#f5f5f7]"
+                          />
+                        )}
+                      </label>
+                    );
+                  })}
                 </div>
               )}
             </div>

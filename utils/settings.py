@@ -325,6 +325,7 @@ def get_config(mask_secrets: bool = True) -> dict:
             "default": meta["default"],
             "has_value": bool(value),
             "secret": bool(meta.get("secret")),
+            "editable": True,
         }
         categories.setdefault(meta["category"], []).append(item)
 

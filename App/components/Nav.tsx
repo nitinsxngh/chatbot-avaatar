@@ -6,14 +6,21 @@ import { usePathname } from "next/navigation";
 const links = [
   { href: "/rag", label: "RAG" },
   { href: "/ingest", label: "Ingest" },
+  { href: "/flow", label: "Flow" },
 ];
 
 export default function Nav() {
   const pathname = usePathname();
 
+  const isFlow = pathname === "/flow";
+
   return (
-    <header className="shrink-0 border-b border-black/[0.06] bg-white/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-11 max-w-[1280px] items-center justify-between px-4 sm:px-6">
+    <header className="z-20 shrink-0 border-b border-black/[0.06] bg-white/80 backdrop-blur-xl">
+      <div
+        className={`mx-auto flex h-11 items-center justify-between px-4 sm:px-5 ${
+          isFlow ? "max-w-none" : "max-w-[1280px] sm:px-6"
+        }`}
+      >
         <Link href="/rag" className="flex items-center gap-2">
           <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#0071e3] text-[11px] font-semibold text-white">
             C

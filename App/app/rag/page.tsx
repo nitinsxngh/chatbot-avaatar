@@ -12,7 +12,7 @@ export default function RagPage() {
   const [responseMeta, setResponseMeta] = useState<ChatResponse | null>(null);
 
   return (
-    <div className="grid min-h-0 flex-1 gap-2 overflow-hidden lg:grid-cols-[260px_1fr_280px]">
+    <div className="mx-auto grid min-h-0 w-full max-w-[1280px] flex-1 gap-2 overflow-hidden px-3 py-2 sm:px-4 lg:grid-cols-[260px_1fr_280px]">
       <Card className="flex min-h-0 flex-col overflow-hidden !rounded-[2px] p-0">
         <ConfigPanel sessionName={sessionName} />
       </Card>

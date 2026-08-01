@@ -16,7 +16,7 @@ export default function RootLayout({
     <html lang="en" className="h-full overflow-hidden">
       <body className="flex h-full flex-col overflow-hidden">
         <Nav />
-        <main className="mx-auto flex min-h-0 w-full max-w-[1280px] flex-1 flex-col overflow-hidden px-3 py-2 sm:px-4">
+        <main className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
           {children}
         </main>
       </body>

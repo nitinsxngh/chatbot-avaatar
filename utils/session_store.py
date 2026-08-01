@@ -125,6 +125,7 @@ def ensure_session(
         else snapshot_runtime_config()
     )
     try:
+        # Only $setOnInsert — same field cannot appear in both $set and $setOnInsert.
         mongo_collection.update_one(
             {"session_name": name},
             {
@@ -134,9 +135,6 @@ def ensure_session(
                     "messages": [],
                     "config": cfg,
                     "created_at": now,
-                },
-                "$set": {
-                    "session_id": name,
                     "updated_at": now,
                 },
             },
@@ -244,25 +242,48 @@ def _sanitize_session_config(updates: Dict[str, Any]) -> Dict[str, Any]:
     return cleaned
 
 
-def config_as_categories(session_config: Dict[str, Any], mask_secrets: bool = True) -> dict:
-    """Shape session config like get_config() for the Settings UI."""
+def config_as_categories(
+    session_config: Dict[str, Any],
+    mask_secrets: bool = True,
+) -> dict:
+    """
+    Shape full config for Settings UI.
+
+    Session keys use values from session_config and are editable.
+    All other keys come from global .env / env and are read-only.
+    """
+    global_cfg = get_config(mask_secrets=mask_secrets)
+    global_by_key: Dict[str, dict] = {}
+    for fields in global_cfg.get("categories", {}).values():
+        for item in fields:
+            global_by_key[item["key"]] = item
+
     categories: Dict[str, list] = {}
     for key, meta in CONFIG_FIELDS.items():
-        if key not in SESSION_CONFIG_KEYS:
-            continue
-        if key in session_config:
-            value = session_config[key]
+        editable = key in SESSION_CONFIG_KEYS
+        if editable:
+            value = session_config[key] if key in session_config else meta["default"]
+            item = {
+                "key": key,
+                "label": meta["label"],
+                "type": meta["type"],
+                "value": value,
+                "default": meta["default"],
+                "has_value": value not in (None, ""),
+                "secret": False,
+                "editable": True,
+            }
         else:
-            value = meta["default"]
-
-        item = {
-            "key": key,
-            "label": meta["label"],
-            "type": meta["type"],
-            "value": value,
-            "default": meta["default"],
-            "has_value": value not in (None, ""),
-            "secret": False,
-        }
+            base = global_by_key.get(key) or {
+                "key": key,
+                "label": meta["label"],
+                "type": meta["type"],
+                "value": meta["default"],
+                "default": meta["default"],
+                "has_value": False,
+                "secret": bool(meta.get("secret")),
+            }
+            item = {**base, "editable": False}
         categories.setdefault(meta["category"], []).append(item)
+
     return {"categories": categories, "session_scoped": True}
