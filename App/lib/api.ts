@@ -120,6 +120,36 @@ export type IngestResponse = {
   topics?: Record<string, string[]>;
 };
 
+export type CatalogModel = {
+  id: string;
+  name: string;
+  dataset_category: string;
+  kind: "model" | "embedding";
+  launch_date: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DatasetCategory = {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CatalogLanguage = {
+  id: string;
+  name: string;
+  code: string;
+  native_name: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 function sessionQuery(sessionName?: string) {
   return sessionName ? `?session_name=${encodeURIComponent(sessionName)}` : "";
 }
@@ -297,4 +327,105 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+
+  listCatalogModels: () => request<CatalogModel[]>("/api/catalog/models"),
+
+  createCatalogModel: (body: {
+    name: string;
+    dataset_category: string;
+    kind: "model" | "embedding";
+    launch_date: string;
+    enabled: boolean;
+  }) =>
+    request<CatalogModel>("/api/catalog/models", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateCatalogModel: (
+    id: string,
+    body: Partial<{
+      name: string;
+      dataset_category: string;
+      kind: "model" | "embedding";
+      launch_date: string;
+      enabled: boolean;
+    }>,
+  ) =>
+    request<CatalogModel>(`/api/catalog/models/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  deleteCatalogModel: (id: string) =>
+    request<{ deleted: boolean; id: string }>(`/api/catalog/models/${id}`, {
+      method: "DELETE",
+    }),
+
+  listDatasetCategories: () =>
+    request<DatasetCategory[]>("/api/catalog/dataset-categories"),
+
+  createDatasetCategory: (body: {
+    name: string;
+    description: string;
+    enabled: boolean;
+  }) =>
+    request<DatasetCategory>("/api/catalog/dataset-categories", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateDatasetCategory: (
+    id: string,
+    body: Partial<{
+      name: string;
+      description: string;
+      enabled: boolean;
+    }>,
+  ) =>
+    request<DatasetCategory>(`/api/catalog/dataset-categories/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  deleteDatasetCategory: (id: string) =>
+    request<{ deleted: boolean; id: string }>(
+      `/api/catalog/dataset-categories/${id}`,
+      { method: "DELETE" },
+    ),
+
+  listCatalogLanguages: () =>
+    request<CatalogLanguage[]>("/api/catalog/languages"),
+
+  createCatalogLanguage: (body: {
+    name: string;
+    code: string;
+    native_name: string;
+    enabled: boolean;
+  }) =>
+    request<CatalogLanguage>("/api/catalog/languages", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateCatalogLanguage: (
+    id: string,
+    body: Partial<{
+      name: string;
+      code: string;
+      native_name: string;
+      enabled: boolean;
+    }>,
+  ) =>
+    request<CatalogLanguage>(`/api/catalog/languages/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  deleteCatalogLanguage: (id: string) =>
+    request<{ deleted: boolean; id: string }>(`/api/catalog/languages/${id}`, {
+      method: "DELETE",
+    }),
+
+  seedCatalog: () => request<Record<string, unknown>>("/api/catalog/seed"),
 };

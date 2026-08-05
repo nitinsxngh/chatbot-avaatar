@@ -35,6 +35,13 @@ CONFIG_FIELDS: dict[str, dict[str, Any]] = {
         "default": "text-embedding-3-small",
         "module": "both",
     },
+    "LANGUAGE": {
+        "label": "Language",
+        "category": "model",
+        "type": "string",
+        "default": "en",
+        "module": "chatbot",
+    },
     # Retrieval
     "RETRIEVE_K": {
         "label": "Retrieve K",
@@ -396,6 +403,7 @@ def _apply_runtime_config(applied: dict[str, Any]) -> None:
         "FLASHRANK_HIGH_THRESHOLD", "FLASHRANK_MID_THRESHOLD", "FLASHRANK_UNRELIABLE_BELOW",
         "PINECONE_HIGH_THRESHOLD", "PINECONE_MID_THRESHOLD", "LOW_CONFIDENCE_REPLY",
         "MAX_API_RETRIES", "RETRY_DELAY_SECONDS", "MAX_RETRIEVAL_ATTEMPTS", "EMBEDDING_MODEL",
+        "LANGUAGE",
         "MAX_USER_MESSAGE_CHARS", "ASSISTANT_NAME", "ASSISTANT_ROLE", "ASSISTANT_ORGANISATION",
         "CHAT_SESSION_ID", "PINECONE_API_KEY", "PINECONE_INDEX_NAME",
         "MONGODB_URI", "MONGODB_DB", "MONGODB_COLLECTION", "MONGODB_LOGS_COLLECTION",
@@ -408,7 +416,7 @@ def _apply_runtime_config(applied: dict[str, Any]) -> None:
             setattr(chatbot, key, value)
         if key == "CHAT_SESSION_ID":
             chatbot.SESSION_ID = str(value)
-        if key in {"ASSISTANT_NAME", "ASSISTANT_ROLE", "ASSISTANT_ORGANISATION"}:
+        if key in {"ASSISTANT_NAME", "ASSISTANT_ROLE", "ASSISTANT_ORGANISATION", "LANGUAGE"}:
             try:
                 chatbot.refresh_assistant_prompts()
             except Exception:

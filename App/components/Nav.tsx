@@ -5,9 +5,17 @@ import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/rag", label: "RAG" },
+  { href: "/rag/model", label: "Models" },
+  { href: "/rag/dataset-category", label: "Categories" },
+  { href: "/rag/language", label: "Languages" },
   { href: "/ingest", label: "Ingest" },
   { href: "/flow", label: "Flow" },
 ];
+
+function isActivePath(pathname: string, href: string) {
+  if (href === "/rag") return pathname === "/rag";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export default function Nav() {
   const pathname = usePathname();
@@ -32,7 +40,7 @@ export default function Nav() {
 
         <nav className="flex rounded-full bg-[#f5f5f7] p-0.5">
           {links.map((link) => {
-            const active = pathname === link.href;
+            const active = isActivePath(pathname, link.href);
             return (
               <Link
                 key={link.href}

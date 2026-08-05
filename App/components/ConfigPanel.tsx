@@ -1,7 +1,12 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { api, ConfigField } from "@/lib/api";
+import {
+  api,
+  CatalogLanguage,
+  CatalogModel,
+  ConfigField,
+} from "@/lib/api";
 
 const CATEGORY_LABELS: Record<string, string> = {
   model: "Model",
@@ -16,13 +21,78 @@ const CATEGORY_LABELS: Record<string, string> = {
   langsmith: "LangSmith",
 };
 
+const FALLBACK_CHAT_MODELS = ["gpt-4o-mini"];
+
+const FALLBACK_EMBEDDING_MODELS = ["text-embedding-3-small"];
+
+const FALLBACK_LANGUAGES: CatalogLanguage[] = [
+  {
+    id: "fallback-en",
+    name: "English",
+    code: "en",
+    native_name: "English",
+    enabled: true,
+    created_at: "",
+    updated_at: "",
+  },
+];
+
+const MODEL_SELECT_KEYS = new Set(["MODEL_NAME", "EMBEDDING_MODEL"]);
+
 type ConfigPanelProps = {
   /** When set, load/save config for this session in MongoDB */
   sessionName?: string;
 };
 
+function optionsForField(
+  key: string,
+  currentValue: string,
+  catalogModels: CatalogModel[],
+): string[] {
+  const enabled = catalogModels.filter((m) => m.enabled);
+  const fromCatalog =
+    key === "EMBEDDING_MODEL"
+      ? enabled.filter((m) => m.kind === "embedding").map((m) => m.name)
+      : enabled.filter((m) => m.kind === "model").map((m) => m.name);
+
+  const fallback =
+    key === "EMBEDDING_MODEL" ? FALLBACK_EMBEDDING_MODELS : FALLBACK_CHAT_MODELS;
+
+  const merged = [...fromCatalog, ...fallback];
+  if (currentValue && !merged.includes(currentValue)) {
+    merged.unshift(currentValue);
+  }
+
+  return Array.from(new Set(merged));
+}
+
+function languageOptions(
+  currentCode: string,
+  catalogLanguages: CatalogLanguage[],
+): CatalogLanguage[] {
+  const enabled = catalogLanguages.filter((l) => l.enabled);
+  const base = enabled.length > 0 ? enabled : FALLBACK_LANGUAGES;
+  const byCode = new Map(base.map((l) => [l.code.toLowerCase(), l]));
+  if (currentCode && !byCode.has(currentCode.toLowerCase())) {
+    byCode.set(currentCode.toLowerCase(), {
+      id: `current-${currentCode}`,
+      name: currentCode,
+      code: currentCode,
+      native_name: currentCode,
+      enabled: true,
+      created_at: "",
+      updated_at: "",
+    });
+  }
+  return Array.from(byCode.values()).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+}
+
 export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
   const [categories, setCategories] = useState<Record<string, ConfigField[]>>({});
+  const [catalogModels, setCatalogModels] = useState<CatalogModel[]>([]);
+  const [catalogLanguages, setCatalogLanguages] = useState<CatalogLanguage[]>([]);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -40,8 +110,14 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
     setLoading(true);
     setError("");
     try {
-      const data = await api.getConfig(sessionName);
+      const [data, models, languages] = await Promise.all([
+        api.getConfig(sessionName),
+        api.listCatalogModels().catch(() => [] as CatalogModel[]),
+        api.listCatalogLanguages().catch(() => [] as CatalogLanguage[]),
+      ]);
       setCategories(data.categories);
+      setCatalogModels(models);
+      setCatalogLanguages(languages);
       setDraft({});
       setFormKey((k) => k + 1);
     } catch (err) {
@@ -258,6 +334,53 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
                           >
                             <option value="true">True</option>
                             <option value="false">False</option>
+                          </select>
+                        ) : MODEL_SELECT_KEYS.has(field.key) ? (
+                          <select
+                            value={
+                              draft[field.key] ?? String(field.value ?? "")
+                            }
+                            onChange={(e) =>
+                              handleChange(field.key, e.target.value)
+                            }
+                            disabled={!editable || busy}
+                            className="apple-input py-2 text-[13px] disabled:cursor-not-allowed disabled:bg-[#f5f5f7]"
+                          >
+                            {optionsForField(
+                              field.key,
+                              String(
+                                draft[field.key] ?? field.value ?? "",
+                              ),
+                              catalogModels,
+                            ).map((name) => (
+                              <option key={name} value={name}>
+                                {name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : field.key === "LANGUAGE" ? (
+                          <select
+                            value={
+                              draft[field.key] ?? String(field.value ?? "en")
+                            }
+                            onChange={(e) =>
+                              handleChange(field.key, e.target.value)
+                            }
+                            disabled={!editable || busy}
+                            className="apple-input py-2 text-[13px] disabled:cursor-not-allowed disabled:bg-[#f5f5f7]"
+                          >
+                            {languageOptions(
+                              String(draft[field.key] ?? field.value ?? "en"),
+                              catalogLanguages,
+                            ).map((lang) => (
+                              <option key={lang.code} value={lang.code}>
+                                {lang.name} ({lang.code})
+                                {lang.native_name &&
+                                lang.native_name !== lang.name
+                                  ? ` — ${lang.native_name}`
+                                  : ""}
+                              </option>
+                            ))}
                           </select>
                         ) : (
                           <input
