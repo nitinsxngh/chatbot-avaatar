@@ -106,18 +106,56 @@ export type StreamEvent =
   | { type: "done"; response: ChatResponse }
   | { type: "error"; message: string };
 
+export type IngestDocumentResult = {
+  pdf_path: string;
+  document_id?: string;
+  source_name?: string;
+  pages: number;
+  blocks?: number;
+  chunks: number;
+  topic_distribution?: Record<string, number>;
+  document_title?: string;
+  domain?: string;
+  assistant_role?: string;
+  discovery_method?: string;
+  topics?: Record<string, string[]>;
+};
+
+export type DataCollection = {
+  id: string;
+  name: string;
+  description: string;
+  namespace: string;
+  enabled: boolean;
+  document_count: number;
+  pages: number;
+  chunks: number;
+  document_title?: string | null;
+  domain?: string | null;
+  topics?: Record<string, string[]>;
+  source_files?: string[];
+  created_at: string;
+  updated_at: string;
+};
+
 export type IngestResponse = {
   status: string;
   pdf_path: string;
+  pdf_paths?: string[];
   pages: number;
   chunks: number;
   index_name: string;
+  namespace?: string;
+  collection_id?: string | null;
+  collection?: DataCollection | null;
   topic_distribution: Record<string, number>;
   document_title?: string;
   domain?: string;
   assistant_role?: string;
   discovery_method?: string;
   topics?: Record<string, string[]>;
+  documents?: IngestDocumentResult[];
+  document_count?: number;
 };
 
 export type CatalogModel = {
@@ -135,6 +173,18 @@ export type DatasetCategory = {
   id: string;
   name: string;
   description: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PublishedConfig = {
+  id: string;
+  name: string;
+  description: string;
+  dataset_category: string;
+  settings: Record<string, string | number | boolean>;
+  session_name?: string | null;
   enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -192,15 +242,50 @@ export const api = {
       },
     ),
 
-  runIngest: (pdf_path?: string) =>
+  runIngest: (options?: {
+    pdf_path?: string;
+    pdf_paths?: string[];
+    replace_all?: boolean;
+    collection_id?: string;
+    create_collection?: {
+      name: string;
+      description?: string;
+      namespace?: string;
+      enabled?: boolean;
+    };
+    replace_namespace?: boolean;
+  }) =>
     request<IngestResponse>("/api/ingest/run", {
       method: "POST",
-      body: JSON.stringify({ pdf_path: pdf_path || null }),
+      body: JSON.stringify({
+        pdf_path: options?.pdf_path || null,
+        pdf_paths: options?.pdf_paths || null,
+        replace_all: options?.replace_all ?? false,
+        collection_id: options?.collection_id || null,
+        create_collection: options?.create_collection || null,
+        replace_namespace: options?.replace_namespace ?? false,
+      }),
     }),
 
-  uploadIngest: async (file: File) => {
+  uploadIngest: async (
+    file: File,
+    options?: {
+      collection_id?: string;
+      collection_name?: string;
+      collection_description?: string;
+      collection_namespace?: string;
+      replace_namespace?: boolean;
+    },
+  ) => {
     const form = new FormData();
     form.append("file", file);
+    if (options?.collection_id) form.append("collection_id", options.collection_id);
+    if (options?.collection_name) form.append("collection_name", options.collection_name);
+    if (options?.collection_description)
+      form.append("collection_description", options.collection_description);
+    if (options?.collection_namespace)
+      form.append("collection_namespace", options.collection_namespace);
+    if (options?.replace_namespace) form.append("replace_namespace", "true");
     const res = await fetch(`${API_BASE}/api/ingest/upload`, {
       method: "POST",
       body: form,
@@ -211,6 +296,73 @@ export const api = {
     }
     return res.json() as Promise<IngestResponse>;
   },
+
+  uploadIngestBatch: async (
+    files: File[],
+    options?: {
+      collection_id?: string;
+      collection_name?: string;
+      collection_description?: string;
+      collection_namespace?: string;
+      replace_namespace?: boolean;
+    },
+  ) => {
+    const form = new FormData();
+    files.forEach((file) => form.append("files", file));
+    if (options?.collection_id) form.append("collection_id", options.collection_id);
+    if (options?.collection_name) form.append("collection_name", options.collection_name);
+    if (options?.collection_description)
+      form.append("collection_description", options.collection_description);
+    if (options?.collection_namespace)
+      form.append("collection_namespace", options.collection_namespace);
+    if (options?.replace_namespace) form.append("replace_namespace", "true");
+    const res = await fetch(`${API_BASE}/api/ingest/upload/batch`, {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(detail || `Batch upload failed (${res.status})`);
+    }
+    return res.json() as Promise<IngestResponse>;
+  },
+
+  listDataCollections: (enabledOnly = false) =>
+    request<DataCollection[]>(
+      `/api/data-collections${enabledOnly ? "?enabled_only=true" : ""}`,
+    ),
+
+  createDataCollection: (body: {
+    name: string;
+    description?: string;
+    namespace?: string;
+    enabled?: boolean;
+  }) =>
+    request<DataCollection>("/api/data-collections", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateDataCollection: (
+    id: string,
+    body: Partial<{ name: string; description: string; enabled: boolean }>,
+  ) =>
+    request<DataCollection>(`/api/data-collections/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  deleteDataCollection: (id: string, clearVectors = true) =>
+    request<{
+      deleted: boolean;
+      id: string;
+      namespace?: string;
+      vectors_cleared?: boolean;
+      warning?: string;
+    }>(
+      `/api/data-collections/${id}?clear_vectors=${clearVectors ? "true" : "false"}`,
+      { method: "DELETE" },
+    ),
 
   sendMessage: (message: string, sessionName?: string) =>
     request<ChatResponse>("/api/chat", {
@@ -428,4 +580,54 @@ export const api = {
     }),
 
   seedCatalog: () => request<Record<string, unknown>>("/api/catalog/seed"),
+
+  listPublishedConfigs: (options?: {
+    dataset_category?: string;
+    enabled_only?: boolean;
+  }) => {
+    const params = new URLSearchParams();
+    if (options?.dataset_category)
+      params.set("dataset_category", options.dataset_category);
+    if (options?.enabled_only) params.set("enabled_only", "true");
+    const qs = params.toString();
+    return request<PublishedConfig[]>(
+      `/api/published-configs${qs ? `?${qs}` : ""}`,
+    );
+  },
+
+  getPublishedConfig: (id: string) =>
+    request<PublishedConfig>(`/api/published-configs/${id}`),
+
+  createPublishedConfig: (body: {
+    name: string;
+    description?: string;
+    dataset_category: string;
+    settings: Record<string, string | number | boolean>;
+    session_name?: string | null;
+    enabled?: boolean;
+  }) =>
+    request<PublishedConfig>("/api/published-configs", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updatePublishedConfig: (
+    id: string,
+    body: Partial<{
+      name: string;
+      description: string;
+      dataset_category: string;
+      settings: Record<string, string | number | boolean>;
+      enabled: boolean;
+    }>,
+  ) =>
+    request<PublishedConfig>(`/api/published-configs/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  deletePublishedConfig: (id: string) =>
+    request<{ deleted: boolean; id: string }>(`/api/published-configs/${id}`, {
+      method: "DELETE",
+    }),
 };

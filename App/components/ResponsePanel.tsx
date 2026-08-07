@@ -46,7 +46,7 @@ export default function ResponsePanel({ meta }: { meta: ChatResponse | null }) {
             <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#86868b]">
               Intent detail
             </h3>
-            <p className="rounded-xl bg-[#f5f5f7] px-3 py-2 text-[12px] text-[#1d1d1f]">
+            <p className="rounded-[2px] bg-[#f5f5f7] px-3 py-2 text-[12px] text-[#1d1d1f]">
               {typeof trace.intent_detail === "string"
                 ? trace.intent_detail
                 : `raw=${trace.intent_detail.raw} → fallback=${trace.intent_detail.fallback}`}
@@ -59,7 +59,7 @@ export default function ResponsePanel({ meta }: { meta: ChatResponse | null }) {
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#86868b]">
             Summary
           </h3>
-          <dl className="rounded-xl bg-[#f5f5f7] px-3 py-1">
+          <dl className="rounded-[2px] bg-[#f5f5f7] px-3 py-1">
             <Row label="Intent" value={meta.intent} />
             <Row label="Route" value={meta.route} />
             <Row label="Band" value={meta.band} />
@@ -80,7 +80,7 @@ export default function ResponsePanel({ meta }: { meta: ChatResponse | null }) {
             <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#86868b]">
               Thresholds
             </h3>
-            <dl className="rounded-xl bg-[#f5f5f7] px-3 py-1">
+            <dl className="rounded-[2px] bg-[#f5f5f7] px-3 py-1">
               <Row label="Flashrank high ≥" value={thresholds.flashrank_high} />
               <Row label="Flashrank mid ≥" value={thresholds.flashrank_mid} />
               <Row label="Flashrank unreliable <" value={thresholds.flashrank_unreliable_below} />
@@ -100,7 +100,7 @@ export default function ResponsePanel({ meta }: { meta: ChatResponse | null }) {
             </h3>
             <div className="space-y-3">
               {trace.retrieval_attempts.map((attempt) => (
-                <div key={attempt.attempt} className="rounded-xl bg-[#f5f5f7] p-3">
+                <div key={attempt.attempt} className="rounded-[2px] bg-[#f5f5f7] p-3">
                   <p className="text-[12px] font-semibold text-[#1d1d1f]">
                     Attempt {attempt.attempt}
                   </p>
@@ -118,7 +118,7 @@ export default function ResponsePanel({ meta }: { meta: ChatResponse | null }) {
                       {attempt.chunks.map((chunk) => (
                         <div
                           key={chunk.rank}
-                          className="rounded-lg bg-white px-2.5 py-2 text-[11px]"
+                          className="rounded-[2px] bg-white px-2.5 py-2 text-[11px]"
                         >
                           <p className="font-medium text-[#1d1d1f]">
                             #{chunk.rank} · {chunk.score} · {chunk.page} · {chunk.topic}
@@ -140,7 +140,7 @@ export default function ResponsePanel({ meta }: { meta: ChatResponse | null }) {
             <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#86868b]">
               Retry queries
             </h3>
-            <ul className="space-y-1 rounded-xl bg-[#f5f5f7] p-3">
+            <ul className="space-y-1 rounded-[2px] bg-[#f5f5f7] p-3">
               {summary.retry_queries.map((q, i) => (
                 <li key={i} className="text-[11px] text-[#1d1d1f] break-words">
                   {q}
@@ -156,7 +156,7 @@ export default function ResponsePanel({ meta }: { meta: ChatResponse | null }) {
             <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#86868b]">
               Logs
             </h3>
-            <pre className="max-h-48 overflow-y-auto rounded-xl bg-[#1d1d1f] p-3 font-mono text-[10px] leading-relaxed text-[#f5f5f7]">
+            <pre className="max-h-48 overflow-y-auto rounded-[2px] bg-[#1d1d1f] p-3 font-mono text-[10px] leading-relaxed text-[#f5f5f7]">
               {trace.logs.join("\n")}
             </pre>
           </section>

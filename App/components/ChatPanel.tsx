@@ -178,7 +178,7 @@ export default function ChatPanel({
             className={`flex ${msg.role === "human" ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-[78%] rounded-[20px] px-4 py-2.5 text-[15px] leading-relaxed ${
+              className={`max-w-[78%] rounded-[2px] px-4 py-2.5 text-[15px] leading-relaxed ${
                 msg.role === "human"
                   ? "bg-[#0071e3] text-white"
                   : "bg-[#e9e9eb] text-[#1d1d1f]"
@@ -191,7 +191,7 @@ export default function ChatPanel({
 
         {showStreamingBubble && (
           <div className="flex justify-start">
-            <div className="max-w-[78%] rounded-[20px] bg-[#e9e9eb] px-4 py-2.5 text-[15px] leading-relaxed text-[#1d1d1f]">
+            <div className="max-w-[78%] rounded-[2px] bg-[#e9e9eb] px-4 py-2.5 text-[15px] leading-relaxed text-[#1d1d1f]">
               {streamingText ? (
                 <>
                   {streamingText}

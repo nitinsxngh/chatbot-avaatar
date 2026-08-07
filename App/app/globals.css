@@ -14,6 +14,7 @@
   --fill: #f5f5f7;
   --bubble-user: #0071e3;
   --bubble-ai: #e9e9eb;
+  --radius: 2px;
 }
 
 * {
@@ -31,22 +32,22 @@ body {
 
 @layer components {
   .apple-card {
-    @apply rounded-2xl bg-white shadow-sm;
+    @apply rounded-[2px] bg-white shadow-sm;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 24px rgba(0, 0, 0, 0.04);
   }
 
   .apple-input {
-    @apply w-full rounded-xl bg-[#f5f5f7] px-4 py-2.5 text-[15px] text-[#1d1d1f] outline-none transition;
+    @apply w-full rounded-[2px] bg-[#f5f5f7] px-4 py-2.5 text-[15px] text-[#1d1d1f] outline-none transition;
     @apply placeholder:text-[#86868b] focus:bg-white focus:ring-2 focus:ring-[#0071e3]/20;
   }
 
   .apple-btn-primary {
-    @apply inline-flex items-center justify-center rounded-full bg-[#0071e3] px-5 py-2.5 text-[15px] font-medium text-white transition;
+    @apply inline-flex items-center justify-center rounded-[2px] bg-[#0071e3] px-5 py-2.5 text-[15px] font-medium text-white transition;
     @apply hover:bg-[#0077ed] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40;
   }
 
   .apple-btn-secondary {
-    @apply inline-flex items-center justify-center rounded-full bg-[#f5f5f7] px-4 py-2 text-[14px] font-medium text-[#1d1d1f] transition;
+    @apply inline-flex items-center justify-center rounded-[2px] bg-[#f5f5f7] px-4 py-2 text-[14px] font-medium text-[#1d1d1f] transition;
     @apply hover:bg-[#e8e8ed] active:scale-[0.98];
   }
 
@@ -151,7 +152,7 @@ body {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 2px;
   background: rgba(0, 113, 227, 0.1);
   padding: 0 10px;
   font-size: 11px;
@@ -179,7 +180,7 @@ body {
 .flow-toolbar__badge {
   display: none;
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: 2px;
   padding: 2px 8px;
   font-size: 10px;
   font-weight: 600;
@@ -243,7 +244,7 @@ body {
   justify-content: center;
   gap: 4px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 2px;
   padding: 0 12px;
   font-size: 12px;
   font-weight: 550;
@@ -293,7 +294,7 @@ body {
   width: 168px;
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 12px;
+  border-radius: 2px;
   background: #ffffff;
   padding: 4px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
@@ -303,7 +304,7 @@ body {
   display: block;
   width: 100%;
   border: 0;
-  border-radius: 8px;
+  border-radius: 2px;
   background: transparent;
   padding: 8px 10px;
   text-align: left;
@@ -399,7 +400,7 @@ body {
   align-items: flex-start;
   gap: 12px;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 12px;
+  border-radius: 2px;
   background: #ffffff;
   padding: 10px 12px;
   text-align: left;
@@ -522,7 +523,7 @@ body {
 .flow-inspector__delete {
   width: 100%;
   border: 0;
-  border-radius: 8px;
+  border-radius: 2px;
   background: transparent;
   padding: 8px 12px;
   font-size: 12px;
@@ -571,7 +572,7 @@ body {
 .flow-inspector__field select {
   width: 100%;
   border: 0;
-  border-radius: 8px;
+  border-radius: 2px;
   background: #f5f5f7;
   padding: 8px 12px;
   font-size: 13px;
@@ -597,7 +598,7 @@ body {
   cursor: pointer;
   align-items: flex-start;
   gap: 12px;
-  border-radius: 12px;
+  border-radius: 2px;
   background: #f5f5f7;
   padding: 12px;
 }
@@ -708,7 +709,7 @@ body {
 .flow-test__ghost,
 .flow-test__primary {
   border: 0;
-  border-radius: 8px;
+  border-radius: 2px;
   padding: 6px 10px;
   font-size: 11px;
   font-weight: 600;
@@ -758,7 +759,7 @@ body {
 
 .flow-test__bubble {
   max-width: 95%;
-  border-radius: 16px;
+  border-radius: 2px;
   padding: 8px 12px;
   font-size: 12px;
   line-height: 1.45;
@@ -791,7 +792,7 @@ body {
 }
 
 .flow-test__chip {
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid rgba(255, 45, 85, 0.35);
   background: rgba(255, 45, 85, 0.08);
   padding: 6px 12px;
@@ -839,7 +840,7 @@ body {
   min-width: 0;
   flex: 1;
   border: 0;
-  border-radius: 12px;
+  border-radius: 2px;
   background: #f5f5f7;
   padding: 8px 12px;
   font-size: 13px;
@@ -853,7 +854,7 @@ body {
 
 .flow-test__composer button {
   border: 0;
-  border-radius: 12px;
+  border-radius: 2px;
   background: #0071e3;
   padding: 8px 12px;
   font-size: 12px;
@@ -890,7 +891,7 @@ body {
   min-width: 200px;
   max-width: 240px;
   padding: 14px 16px;
-  border-radius: 16px;
+  border-radius: 2px;
   border: 2px solid rgba(0, 0, 0, 0.08);
   background: #ffffff;
   cursor: grab;
@@ -945,7 +946,7 @@ body {
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: 2px;
   background: color-mix(in srgb, var(--node-accent, #0071e3) 12%, white);
   color: var(--node-accent, #0071e3);
   font-size: 8px;
@@ -962,7 +963,7 @@ body {
 
 .flow-studio .flow-node__tag {
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: 2px;
   background: var(--node-accent, #0071e3);
   padding: 2px 6px;
   font-size: 9px;
@@ -1029,7 +1030,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid color-mix(in srgb, var(--node-accent, #ff2d55) 35%, white);
   background: color-mix(in srgb, var(--node-accent, #ff2d55) 10%, white);
   padding: 4px 10px;
@@ -1073,7 +1074,7 @@ body {
 .flow-studio .flow-controls {
   overflow: hidden !important;
   border: 1px solid rgba(0, 0, 0, 0.08) !important;
-  border-radius: 12px !important;
+  border-radius: 2px !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06) !important;
   background: #fff !important;
 }
@@ -1089,7 +1090,7 @@ body {
   gap: 2px;
   padding: 2px;
   border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
+  border-radius: 2px;
   background: #f5f5f7;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
@@ -1101,7 +1102,7 @@ body {
   gap: 5px;
   min-width: 72px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 2px;
   background: transparent;
   padding: 6px 10px;
   font-size: 11px;
@@ -1167,7 +1168,7 @@ body {
 .flow-studio .flow-minimap {
   overflow: hidden !important;
   border: 1px solid rgba(0, 0, 0, 0.08) !important;
-  border-radius: 12px !important;
+  border-radius: 2px !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06) !important;
   background: #fff !important;
   width: 140px !important;
@@ -1189,7 +1190,7 @@ body {
   align-items: center;
   gap: 4px;
   padding: 3px;
-  border-radius: 999px;
+  border-radius: 2px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   background: #ffffff;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
@@ -1222,7 +1223,7 @@ body {
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 999px;
+  border-radius: 2px;
   background: #f5f5f7;
   color: #1d1d1f;
   cursor: pointer;

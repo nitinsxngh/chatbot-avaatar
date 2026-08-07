@@ -8,8 +8,10 @@ const links = [
   { href: "/rag/model", label: "Models" },
   { href: "/rag/dataset-category", label: "Categories" },
   { href: "/rag/language", label: "Languages" },
+  { href: "/rag/published-configs", label: "Configs" },
   { href: "/ingest", label: "Ingest" },
   { href: "/flow", label: "Flow" },
+  { href: "/documentation", label: "Documentation" },
 ];
 
 function isActivePath(pathname: string, href: string) {
@@ -30,7 +32,7 @@ export default function Nav() {
         }`}
       >
         <Link href="/rag" className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#0071e3] text-[11px] font-semibold text-white">
+          <div className="flex h-6 w-6 items-center justify-center rounded-[2px] bg-[#0071e3] text-[11px] font-semibold text-white">
             C
           </div>
           <span className="text-[14px] font-semibold tracking-tight text-[#1d1d1f]">
@@ -38,14 +40,14 @@ export default function Nav() {
           </span>
         </Link>
 
-        <nav className="flex rounded-full bg-[#f5f5f7] p-0.5">
+        <nav className="flex rounded-[2px] bg-[#f5f5f7] p-0.5">
           {links.map((link) => {
             const active = isActivePath(pathname, link.href);
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`rounded-full px-3 py-1 text-[12px] font-medium transition-all duration-200 ${
+                className={`rounded-[2px] px-3 py-1 text-[12px] font-medium transition-all duration-200 ${
                   active
                     ? "bg-white text-[#1d1d1f] shadow-sm"
                     : "text-[#86868b] hover:text-[#1d1d1f]"

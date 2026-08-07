@@ -169,6 +169,8 @@ SESSION_ID = os.getenv("CHAT_SESSION_ID", "default")
 T = TypeVar("T")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY", "")
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "chatbot-avatar")
+PINECONE_NAMESPACE = os.getenv("PINECONE_NAMESPACE", "")
+DATA_COLLECTION_ID = os.getenv("DATA_COLLECTION_ID", "")
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "chatbot_avatar")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "chat_memory")
@@ -414,6 +416,7 @@ intent_chain = intent_prompt | intent_llm | StrOutputParser()
 # --- Pinecone vector DB + Reranker ---
 embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
 vector_store = None  # lazy-loaded via get_vector_store()
+_vector_store_key = None  # (index_name, namespace)
 
 # Keep Flashrank models out of /tmp (macOS clears it → empty dir, no re-download)
 FLASHRANK_MODEL = "ms-marco-TinyBERT-L-2-v2"
@@ -445,11 +448,14 @@ def get_vector_store(force_reload: bool = False):
     Lazy Pinecone connection with retries.
 
     Avoids failing/hanging API startup on transient macOS LibreSSL SSL errors
-    when contacting api.pinecone.io.
+    when contacting api.pinecone.io. Binds to PINECONE_NAMESPACE when set.
     """
-    global vector_store
+    global vector_store, _vector_store_key
 
-    if vector_store is not None and not force_reload:
+    ns = (PINECONE_NAMESPACE or "").strip()
+    store_key = (PINECONE_INDEX_NAME, ns)
+
+    if vector_store is not None and not force_reload and _vector_store_key == store_key:
         return vector_store
 
     if not PINECONE_API_KEY:
@@ -458,11 +464,18 @@ def get_vector_store(force_reload: bool = False):
     last_error: Optional[Exception] = None
     for attempt in range(1, MAX_API_RETRIES + 1):
         try:
-            vector_store = PineconeVectorStore.from_existing_index(
-                index_name=PINECONE_INDEX_NAME,
-                embedding=embeddings,
+            kwargs = {
+                "index_name": PINECONE_INDEX_NAME,
+                "embedding": embeddings,
+            }
+            if ns:
+                kwargs["namespace"] = ns
+            vector_store = PineconeVectorStore.from_existing_index(**kwargs)
+            _vector_store_key = store_key
+            print(
+                f"[pinecone] connected to index={PINECONE_INDEX_NAME} "
+                f"namespace={ns or 'default'}"
             )
-            print(f"[pinecone] connected to index={PINECONE_INDEX_NAME}")
             return vector_store
         except Exception as exc:
             last_error = exc
@@ -475,6 +488,7 @@ def get_vector_store(force_reload: bool = False):
 
     print(f"[pinecone] unavailable after retries: {last_error}")
     vector_store = None
+    _vector_store_key = None
     return None
 
 
@@ -553,6 +567,7 @@ def apply_session_config(session_name: str) -> dict:
     mod = sys.modules[__name__]
     prev_language = LANGUAGE
     prev_assistant = (ASSISTANT_NAME, ASSISTANT_ROLE, ASSISTANT_ORGANISATION)
+    prev_pinecone = (PINECONE_INDEX_NAME, PINECONE_NAMESPACE)
     for key, value in cfg.items():
         if hasattr(mod, key):
             setattr(mod, key, value)
@@ -565,6 +580,12 @@ def apply_session_config(session_name: str) -> dict:
     ):
         try:
             refresh_assistant_prompts()
+        except Exception:
+            pass
+    # Rebind vector store when index/namespace (data collection) changes
+    if (PINECONE_INDEX_NAME, PINECONE_NAMESPACE) != prev_pinecone:
+        try:
+            get_vector_store(force_reload=True)
         except Exception:
             pass
     return cfg
@@ -754,6 +775,10 @@ def retrieve_and_rerank(search_query: str, trace: Optional[dict] = None):
     """
     Retrieve with optional metadata filter, then rerank.
     Returns (reranked_docs, pinecone_top_score, retrieval_meta).
+
+    Thin / heading-only chunks are dropped before rerank so title matches
+    cannot outrank definitional body text (which caused "I don't know" on
+    high-confidence RAG_HIGH routes).
     """
     store = get_vector_store()
     if store is None:
@@ -766,7 +791,9 @@ def retrieve_and_rerank(search_query: str, trace: Optional[dict] = None):
         filter_str = filter_label(metadata_filter)
         _trace(trace, f"[metadata_filter={filter_str}]")
 
-        search_kwargs = {"k": RETRIEVE_K}
+        # Fetch extra candidates so filtering thin headings still leaves enough
+        fetch_k = max(RETRIEVE_K * 2, RETRIEVE_K + 5)
+        search_kwargs = {"k": fetch_k}
         if metadata_filter:
             search_kwargs["filter"] = metadata_filter
 
@@ -782,14 +809,43 @@ def retrieve_and_rerank(search_query: str, trace: Optional[dict] = None):
             _trace(trace, "[metadata_filter=none (fallback)]")
             scored = store.similarity_search_with_score(
                 search_query,
-                k=RETRIEVE_K,
+                k=fetch_k,
             )
 
-        candidates = [doc for doc, _ in scored]
-        # Pinecone cosine score: higher is more similar
-        pinecone_top = max((float(score) for _, score in scored), default=0.0)
+        # Prefer body text over heading-only / title stubs
+        substantive_scored = [
+            (doc, score) for doc, score in scored if is_substantive_chunk(doc)
+        ]
+        dropped = len(scored) - len(substantive_scored)
+        if dropped:
+            _trace(
+                trace,
+                f"[dropped_thin_chunks={dropped} kept={len(substantive_scored)}]",
+            )
+        if not substantive_scored and scored:
+            # Nothing substantive — keep originals rather than empty context
+            substantive_scored = scored
+            _trace(trace, "[thin_chunk_filter=bypassed (no substantive hits)]")
+
+        # Keep top RETRIEVE_K by Pinecone score for rerank
+        substantive_scored = sorted(
+            substantive_scored,
+            key=lambda item: float(item[1]),
+            reverse=True,
+        )[:RETRIEVE_K]
+
+        candidates = [doc for doc, _ in substantive_scored]
+        pinecone_top = max(
+            (float(score) for _, score in substantive_scored),
+            default=0.0,
+        )
 
         reranked = reranker.compress_documents(candidates, query=search_query)
+        # Final safety: prefer substantive among reranked
+        substantive_reranked = [d for d in reranked if is_substantive_chunk(d)]
+        if substantive_reranked:
+            reranked = substantive_reranked
+
         retrieval_meta = {
             "metadata_filter": filter_str,
             "filter_fallback": filter_fallback,
@@ -799,13 +855,52 @@ def retrieve_and_rerank(search_query: str, trace: Optional[dict] = None):
     return with_retry("retrieve_and_rerank", _run)
 
 
+def is_substantive_chunk(doc) -> bool:
+    """
+    True when a chunk likely contains answerable prose.
+
+    Heading-only stubs like "What is Digital Marketing?" match queries
+    strongly but leave the LLM with no definition → "I don't know".
+    """
+    meta = getattr(doc, "metadata", None) or {}
+    structure = str(
+        meta.get("structure_type") or meta.get("block_type") or ""
+    ).lower()
+    text = (getattr(doc, "page_content", None) or "").strip()
+    if not text:
+        return False
+    if structure == "heading":
+        return False
+
+    words = text.split()
+    word_count = len(words)
+    try:
+        meta_words = int(meta.get("word_count") or 0)
+        if meta_words:
+            word_count = max(word_count, meta_words)
+    except (TypeError, ValueError):
+        pass
+
+    # Short title-like lines (no sentence punctuation)
+    if word_count < 18 and not any(p in text for p in ".!?;:"):
+        return False
+    return word_count >= 12
+
+
 def format_docs(docs) -> str:
     """Join retrieved chunks into one context string (delimiter-safe)."""
     if not docs:
         return "No relevant context found."
-    return "\n\n---\n\n".join(
-        wrap_untrusted(doc.page_content) for doc in docs
-    )
+    parts = []
+    for doc in docs:
+        text = wrap_untrusted(doc.page_content)
+        meta = doc.metadata or {}
+        section = (meta.get("section_title") or "").strip()
+        # If section title isn't already in the chunk, surface it for the LLM
+        if section and section.lower() not in text.lower()[: len(section) + 20]:
+            text = f"[{section}]\n{text}"
+        parts.append(text)
+    return "\n\n---\n\n".join(parts)
 
 
 def page_label(metadata: dict) -> str:

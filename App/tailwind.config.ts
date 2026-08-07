@@ -1,5 +1,7 @@
 import type { Config } from "tailwindcss";
 
+const RADIUS = "2px";
+
 const config: Config = {
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -9,6 +11,17 @@ const config: Config = {
     "./lib/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
+    borderRadius: {
+      none: "0px",
+      sm: RADIUS,
+      DEFAULT: RADIUS,
+      md: RADIUS,
+      lg: RADIUS,
+      xl: RADIUS,
+      "2xl": RADIUS,
+      "3xl": RADIUS,
+      full: "9999px",
+    },
     extend: {
       colors: {
         apple: {

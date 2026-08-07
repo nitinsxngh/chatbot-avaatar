@@ -6,6 +6,8 @@ import {
   CatalogLanguage,
   CatalogModel,
   ConfigField,
+  DataCollection,
+  DatasetCategory,
 } from "@/lib/api";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -93,9 +95,16 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
   const [categories, setCategories] = useState<Record<string, ConfigField[]>>({});
   const [catalogModels, setCatalogModels] = useState<CatalogModel[]>([]);
   const [catalogLanguages, setCatalogLanguages] = useState<CatalogLanguage[]>([]);
+  const [dataCollections, setDataCollections] = useState<DataCollection[]>([]);
+  const [datasetCategories, setDatasetCategories] = useState<DatasetCategory[]>([]);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishName, setPublishName] = useState("");
+  const [publishDescription, setPublishDescription] = useState("");
+  const [publishCategory, setPublishCategory] = useState("");
   const [resetting, setResetting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -110,14 +119,19 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
     setLoading(true);
     setError("");
     try {
-      const [data, models, languages] = await Promise.all([
-        api.getConfig(sessionName),
-        api.listCatalogModels().catch(() => [] as CatalogModel[]),
-        api.listCatalogLanguages().catch(() => [] as CatalogLanguage[]),
-      ]);
+      const [data, models, languages, collections, categoriesList] =
+        await Promise.all([
+          api.getConfig(sessionName),
+          api.listCatalogModels().catch(() => [] as CatalogModel[]),
+          api.listCatalogLanguages().catch(() => [] as CatalogLanguage[]),
+          api.listDataCollections(true).catch(() => [] as DataCollection[]),
+          api.listDatasetCategories().catch(() => [] as DatasetCategory[]),
+        ]);
       setCategories(data.categories);
       setCatalogModels(models);
       setCatalogLanguages(languages);
+      setDataCollections(collections);
+      setDatasetCategories(categoriesList.filter((c) => c.enabled));
       setDraft({});
       setFormKey((k) => k + 1);
     } catch (err) {
@@ -137,20 +151,17 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
       .flat()
       .find((item) => item.key === key);
     if (field && field.editable === false) return;
-    setDraft((prev) => ({ ...prev, [key]: value }));
+    setDraft((prev) => {
+      const next = { ...prev, [key]: value };
+      if (key === "DATA_COLLECTION_ID") {
+        const match = dataCollections.find((c) => c.id === value);
+        next.PINECONE_NAMESPACE = match?.namespace || "";
+      }
+      return next;
+    });
   }
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (Object.keys(draft).length === 0) {
-      setMessage("No changes.");
-      return;
-    }
-
-    setSaving(true);
-    setMessage("");
-    setError("");
-
+  function buildUpdatesFromDraft(): Record<string, string | number | boolean> {
     const updates: Record<string, string | number | boolean> = {};
     for (const [key, value] of Object.entries(draft)) {
       const field = Object.values(categories)
@@ -163,28 +174,86 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
       else if (field.type === "bool") updates[key] = value === "true";
       else updates[key] = value;
     }
+    return updates;
+  }
 
-    if (Object.keys(updates).length === 0) {
-      setSaving(false);
-      setMessage("No editable changes.");
+  function buildConfigSnapshot(): Record<string, string | number | boolean> {
+    const snapshot: Record<string, string | number | boolean> = {};
+    for (const fields of Object.values(categories)) {
+      for (const field of fields) {
+        if (field.secret || field.editable === false) continue;
+        const raw = draft[field.key] ?? String(field.value ?? "");
+        if (field.type === "int") snapshot[field.key] = Number(raw);
+        else if (field.type === "float") snapshot[field.key] = Number(raw);
+        else if (field.type === "bool") snapshot[field.key] = raw === "true";
+        else snapshot[field.key] = raw;
+      }
+    }
+    return snapshot;
+  }
+
+  function openPublishModal(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    setMessage("");
+    setPublishName(
+      sessionName ? `${sessionName} config` : "RAG config",
+    );
+    setPublishDescription("");
+    const first = datasetCategories[0]?.name || "";
+    setPublishCategory(first);
+    setPublishOpen(true);
+  }
+
+  async function handlePublish() {
+    if (!publishName.trim()) {
+      setError("Enter a name for this published config");
+      return;
+    }
+    if (!publishCategory.trim()) {
+      setError("Select a dataset category");
       return;
     }
 
+    setPublishing(true);
+    setSaving(true);
+    setError("");
+    setMessage("");
+
     try {
-      const result = await api.updateConfig(updates, sessionName);
-      setCategories(result.config.categories);
-      setDraft({});
-      setFormKey((k) => k + 1);
+      const updates = buildUpdatesFromDraft();
+      const snapshot = { ...buildConfigSnapshot(), ...updates };
+
+      if (Object.keys(updates).length > 0) {
+        const result = await api.updateConfig(updates, sessionName);
+        setCategories(result.config.categories);
+        setDraft({});
+        setFormKey((k) => k + 1);
+      }
+
+      const published = await api.createPublishedConfig({
+        name: publishName.trim(),
+        description: publishDescription.trim(),
+        dataset_category: publishCategory.trim(),
+        settings: snapshot,
+        session_name: sessionName || null,
+        enabled: true,
+      });
+
+      setPublishOpen(false);
       setMessage(
-        `Saved ${result.updated.length} setting${result.updated.length === 1 ? "" : "s"}${
-          sessionName ? ` for “${sessionName}”` : ""
-        }.`,
+        `Published “${published.name}” under ${published.dataset_category}.`,
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save");
+      setError(err instanceof Error ? err.message : "Failed to publish");
     } finally {
+      setPublishing(false);
       setSaving(false);
     }
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    openPublishModal(e);
   }
 
   async function handleResetAll() {
@@ -255,9 +324,10 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
     );
   }
 
-  const busy = saving || resetting;
+  const busy = saving || resetting || publishing;
 
   return (
+    <>
     <form key={formKey} onSubmit={handleSubmit} className="flex h-full flex-col">
       <div className="border-b border-black/[0.06] px-4 py-2">
         <h2 className="text-[14px] font-semibold text-[#1d1d1f]">Settings</h2>
@@ -382,6 +452,24 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
                               </option>
                             ))}
                           </select>
+                        ) : field.key === "DATA_COLLECTION_ID" ? (
+                          <select
+                            value={
+                              draft[field.key] ?? String(field.value ?? "")
+                            }
+                            onChange={(e) =>
+                              handleChange(field.key, e.target.value)
+                            }
+                            disabled={!editable || busy}
+                            className="apple-input py-2 text-[13px] disabled:cursor-not-allowed disabled:bg-[#f5f5f7]"
+                          >
+                            <option value="">Default namespace</option>
+                            {dataCollections.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name} ({c.namespace})
+                              </option>
+                            ))}
+                          </select>
                         ) : (
                           <input
                             type={
@@ -422,7 +510,7 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
 
       <div className="space-y-2 border-t border-black/[0.06] px-4 py-3">
         <button type="submit" disabled={busy} className="apple-btn-primary w-full text-[14px]">
-          {saving ? "Saving…" : "Save changes"}
+          {publishing ? "Publishing…" : "Publish config"}
         </button>
         <button
           type="button"
@@ -433,8 +521,98 @@ export default function ConfigPanel({ sessionName }: ConfigPanelProps) {
           {resetting ? "Resetting…" : "Reset to defaults"}
         </button>
         {message && <p className="text-center text-[12px] text-[#34c759]">{message}</p>}
-        {error && <p className="text-center text-[12px] text-[#ff3b30]">{error}</p>}
+        {error && !publishOpen && (
+          <p className="text-center text-[12px] text-[#ff3b30]">{error}</p>
+        )}
       </div>
     </form>
+
+    {publishOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="publish-config-title"
+          className="w-full max-w-md rounded-[2px] bg-white p-5 shadow-lg"
+        >
+          <h3
+            id="publish-config-title"
+            className="text-[17px] font-semibold text-[#1d1d1f]"
+          >
+            Publish config
+          </h3>
+          <p className="mt-1 text-[13px] text-[#86868b]">
+            Save this configuration under a dataset category so you can reuse it later.
+          </p>
+
+          <div className="mt-4 space-y-3">
+            <label className="block">
+              <span className="apple-label mb-1.5 block">Name</span>
+              <input
+                value={publishName}
+                onChange={(e) => setPublishName(e.target.value)}
+                className="apple-input"
+                placeholder="e.g. Marketing RAG v1"
+                autoFocus
+              />
+            </label>
+            <label className="block">
+              <span className="apple-label mb-1.5 block">Category</span>
+              <select
+                value={publishCategory}
+                onChange={(e) => setPublishCategory(e.target.value)}
+                className="apple-input"
+              >
+                {datasetCategories.length === 0 ? (
+                  <option value="">No categories — create one first</option>
+                ) : (
+                  datasetCategories.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+            <label className="block">
+              <span className="apple-label mb-1.5 block">Description</span>
+              <textarea
+                value={publishDescription}
+                onChange={(e) => setPublishDescription(e.target.value)}
+                className="apple-input min-h-[72px] resize-y"
+                placeholder="Optional notes"
+              />
+            </label>
+          </div>
+
+          {error && (
+            <p className="mt-3 text-[12px] text-[#ff3b30]">{error}</p>
+          )}
+
+          <div className="mt-5 flex gap-2">
+            <button
+              type="button"
+              disabled={publishing || !publishCategory}
+              onClick={handlePublish}
+              className="apple-btn-primary flex-1 text-[14px]"
+            >
+              {publishing ? "Publishing…" : "Publish"}
+            </button>
+            <button
+              type="button"
+              disabled={publishing}
+              onClick={() => {
+                setPublishOpen(false);
+                setError("");
+              }}
+              className="apple-btn-secondary text-[14px]"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

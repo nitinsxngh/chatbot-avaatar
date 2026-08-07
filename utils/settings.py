@@ -183,6 +183,20 @@ CONFIG_FIELDS: dict[str, dict[str, Any]] = {
         "default": "chatbot-avatar",
         "module": "both",
     },
+    "PINECONE_NAMESPACE": {
+        "label": "Pinecone namespace",
+        "category": "pinecone",
+        "type": "string",
+        "default": "",
+        "module": "both",
+    },
+    "DATA_COLLECTION_ID": {
+        "label": "Data collection ID",
+        "category": "pinecone",
+        "type": "string",
+        "default": "",
+        "module": "chatbot",
+    },
     "PINECONE_CLOUD": {
         "label": "Pinecone cloud",
         "category": "pinecone",
@@ -406,6 +420,7 @@ def _apply_runtime_config(applied: dict[str, Any]) -> None:
         "LANGUAGE",
         "MAX_USER_MESSAGE_CHARS", "ASSISTANT_NAME", "ASSISTANT_ROLE", "ASSISTANT_ORGANISATION",
         "CHAT_SESSION_ID", "PINECONE_API_KEY", "PINECONE_INDEX_NAME",
+        "PINECONE_NAMESPACE", "DATA_COLLECTION_ID",
         "MONGODB_URI", "MONGODB_DB", "MONGODB_COLLECTION", "MONGODB_LOGS_COLLECTION",
     }
     ingest_keys = {"PDF_PATH", "CHUNK_SIZE", "CHUNK_OVERLAP", "EMBEDDING_MODEL",
@@ -419,6 +434,11 @@ def _apply_runtime_config(applied: dict[str, Any]) -> None:
         if key in {"ASSISTANT_NAME", "ASSISTANT_ROLE", "ASSISTANT_ORGANISATION", "LANGUAGE"}:
             try:
                 chatbot.refresh_assistant_prompts()
+            except Exception:
+                pass
+        if key in {"PINECONE_INDEX_NAME", "PINECONE_NAMESPACE", "PINECONE_API_KEY"}:
+            try:
+                chatbot.get_vector_store(force_reload=True)
             except Exception:
                 pass
         if key in ingest_keys:

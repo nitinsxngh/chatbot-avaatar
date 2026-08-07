@@ -249,6 +249,16 @@ def enrich_chunk_metadata(
     text: str,
     document_id: str = "",
     source_name: str = "",
+    section_title: str = "",
+    section_path: str = "",
+    heading_level: int = 0,
+    block_type: str = "",
+    section_index: int = 0,
+    chunk_index: int = 0,
+    chunk_index_in_section: int = 0,
+    structure_type: str = "",
+    topics_all: Optional[List[str]] = None,
+    primary_topic: Optional[str] = None,
 ) -> dict:
     """Add filter-friendly metadata to a chunk (Pinecone-safe fields only)."""
     page = metadata.get("page")
@@ -257,17 +267,29 @@ def enrich_chunk_metadata(
     except (TypeError, ValueError):
         page_number = None
 
-    primary_topic, topics = detect_topics(text)
+    if primary_topic is None or topics_all is None:
+        primary_topic, topics_all = detect_topics(text)
+
+    word_count = len(_tokenize(text))
 
     enriched = {
         "page_number": page_number,
         "page_label": str(metadata.get("page_label") or page_number or ""),
         "primary_topic": primary_topic,
-        "topics": topics,
+        "topics": topics_all,
         "source": source_name or metadata.get("source") or "",
         "title": metadata.get("title") or "",
         "author": metadata.get("author") or "",
         "document_id": document_id or "",
+        "section_title": section_title[:120] if section_title else "",
+        "section_path": section_path[:200] if section_path else "",
+        "heading_level": heading_level if heading_level else None,
+        "block_type": block_type or structure_type or "paragraph",
+        "section_index": section_index if section_index else None,
+        "chunk_index": chunk_index if chunk_index else None,
+        "chunk_index_in_section": chunk_index_in_section if chunk_index_in_section else None,
+        "structure_type": structure_type or block_type or "paragraph",
+        "word_count": word_count if word_count else None,
     }
     return {k: v for k, v in enriched.items() if v not in (None, "")}
 
